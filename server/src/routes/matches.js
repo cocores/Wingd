@@ -31,9 +31,16 @@ function isPilotOfMatch(userId, match) {
   return userId === match.pilot_a_id || userId === match.pilot_b_id;
 }
 
+function copilotSideFor(userId, match) {
+  if (isCopilotOf(userId, match.pilot_a_id)) return 'a';
+  if (isCopilotOf(userId, match.pilot_b_id)) return 'b';
+  return null;
+}
+
 function serializeMatch(match, userId) {
   const pilotA = db.prepare('SELECT id, name FROM users WHERE id = ?').get(match.pilot_a_id);
   const pilotB = db.prepare('SELECT id, name FROM users WHERE id = ?').get(match.pilot_b_id);
+  const mySide = copilotSideFor(userId, match);
   return {
     id: match.id,
     status: match.status,
@@ -45,7 +52,9 @@ function serializeMatch(match, userId) {
     bRejected: !!match.b_rejected,
     createdAt: match.created_at,
     isPilot: isPilotOfMatch(userId, match),
-    canAccessCopilotRoom: canAccessCopilotRoom(userId, match),
+    canAccessCopilotRoom: !!mySide,
+    mySide,
+    myApproved: mySide === 'a' ? !!match.a_approved : mySide === 'b' ? !!match.b_approved : false,
   };
 }
 
@@ -107,12 +116,17 @@ router.get('/matches/:id', requireAuth, (req, res) => {
   res.json({ match: serializeMatch(match, req.userId) });
 });
 
+const TERMINAL_STATUSES = ['rejected', 'unmatched'];
+
 // A co-pilot of one of the two pilots approves the match on behalf of their pilot.
 router.post('/matches/:id/approve', requireAuth, (req, res) => {
   const match = getMatchOr404(req, res);
   if (!match) return;
+  if (TERMINAL_STATUSES.includes(match.status)) {
+    return res.status(400).json({ error: 'This match has already ended' });
+  }
 
-  const side = isCopilotOf(req.userId, match.pilot_a_id) ? 'a' : isCopilotOf(req.userId, match.pilot_b_id) ? 'b' : null;
+  const side = copilotSideFor(req.userId, match);
   if (!side) return res.status(403).json({ error: 'Only a co-pilot of one of these pilots can vouch on a match' });
 
   db.prepare(`UPDATE matches SET ${side}_approved = 1, ${side}_rejected = 0 WHERE id = ?`).run(match.id);
@@ -129,11 +143,52 @@ router.post('/matches/:id/approve', requireAuth, (req, res) => {
 router.post('/matches/:id/reject', requireAuth, (req, res) => {
   const match = getMatchOr404(req, res);
   if (!match) return;
+  if (TERMINAL_STATUSES.includes(match.status)) {
+    return res.status(400).json({ error: 'This match has already ended' });
+  }
 
-  const side = isCopilotOf(req.userId, match.pilot_a_id) ? 'a' : isCopilotOf(req.userId, match.pilot_b_id) ? 'b' : null;
+  const side = copilotSideFor(req.userId, match);
   if (!side) return res.status(403).json({ error: 'Only a co-pilot of one of these pilots can vouch on a match' });
 
   db.prepare(`UPDATE matches SET ${side}_rejected = 1, ${side}_approved = 0, status = 'rejected' WHERE id = ?`).run(match.id);
+  const updated = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
+  res.json({ match: serializeMatch(updated, req.userId) });
+});
+
+// A co-pilot withdraws a previously-given vouch. If the match had already been fully
+// approved, this re-locks the pilot chat by dropping the match back to co-pilot review.
+router.post('/matches/:id/withdraw', requireAuth, (req, res) => {
+  const match = getMatchOr404(req, res);
+  if (!match) return;
+  if (TERMINAL_STATUSES.includes(match.status)) {
+    return res.status(400).json({ error: 'This match has already ended' });
+  }
+
+  const side = copilotSideFor(req.userId, match);
+  if (!side) return res.status(403).json({ error: 'Only a co-pilot of one of these pilots can vouch on a match' });
+  if (!match[`${side}_approved`]) {
+    return res.status(400).json({ error: 'You have not vouched for this match yet' });
+  }
+
+  db.prepare(
+    `UPDATE matches SET ${side}_approved = 0, status = CASE WHEN status = 'approved' THEN 'copilot_review' ELSE status END WHERE id = ?`
+  ).run(match.id);
+  const updated = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
+  res.json({ match: serializeMatch(updated, req.userId) });
+});
+
+// Either pilot can walk away from a match at any (non-terminal) stage.
+router.post('/matches/:id/unmatch', requireAuth, (req, res) => {
+  const match = getMatchOr404(req, res);
+  if (!match) return;
+  if (!isPilotOfMatch(req.userId, match)) {
+    return res.status(403).json({ error: 'Only the two pilots can unmatch' });
+  }
+  if (TERMINAL_STATUSES.includes(match.status)) {
+    return res.status(400).json({ error: 'This match has already ended' });
+  }
+
+  db.prepare(`UPDATE matches SET status = 'unmatched' WHERE id = ?`).run(match.id);
   const updated = db.prepare('SELECT * FROM matches WHERE id = ?').get(match.id);
   res.json({ match: serializeMatch(updated, req.userId) });
 });

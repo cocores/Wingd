@@ -34,6 +34,9 @@ export function attachSocket(httpServer, clientOrigin) {
       if (!match || !canAccessCopilotRoom(socket.userId, match)) {
         return ack?.({ error: 'Not authorized for this co-pilot room' });
       }
+      if (match.status === 'rejected' || match.status === 'unmatched') {
+        return ack?.({ error: 'This match has ended' });
+      }
       if (!body || !body.trim()) return ack?.({ error: 'Message body required' });
 
       const result = db

@@ -88,7 +88,7 @@ export default function CopilotChat() {
         start talking.
       </p>
 
-      {match.status === 'copilot_review' && (
+      {(match.status === 'copilot_review' || match.status === 'approved') && !match.myApproved && (
         <div className="vouch-bar">
           <button className="approve" onClick={() => respond('approve')}>
             Vouch for this match ✔
@@ -98,8 +98,16 @@ export default function CopilotChat() {
           </button>
         </div>
       )}
+      {(match.status === 'copilot_review' || match.status === 'approved') && match.myApproved && (
+        <div className="vouch-bar">
+          <button className="reject" onClick={() => respond('withdraw')}>
+            Withdraw vouch
+          </button>
+        </div>
+      )}
       {match.status === 'approved' && <p className="success">Both sides' co-pilots approved — the pilots can now chat directly!</p>}
       {match.status === 'rejected' && <p className="error">This match was called off by a co-pilot.</p>}
+      {match.status === 'unmatched' && <p className="error">One of the pilots unmatched. This chat is now read-only.</p>}
 
       <div className="chat-window">
         {messages.map((m) => (

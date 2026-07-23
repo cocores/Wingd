@@ -273,7 +273,8 @@ textarea {
   color: #0f1115;
 }
 
-.badge.rejected {
+.badge.rejected,
+.badge.unmatched {
   background: var(--danger);
   color: #0f1115;
 }
@@ -333,6 +334,13 @@ textarea {
 
 .chat-page {
   max-width: 640px;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .chat-window {

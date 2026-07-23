@@ -73,11 +73,29 @@ export default function PilotChat() {
 
   const other = match.pilotA.id === user.id ? match.pilotB : match.pilotA;
 
+  async function unmatch() {
+    if (!window.confirm(`Unmatch with ${other.name}? This ends the match.`)) return;
+    await api.post(`/matches/${id}/unmatch`);
+    const { data } = await api.get(`/matches/${id}`);
+    setMatch(data.match);
+  }
+
   return (
     <div className="page chat-page">
       <Link to="/matches">← Back to matches</Link>
-      <h1>Chat with {other.name}</h1>
-      <p className="muted">Your co-pilots gave this the green light. Take it from here!</p>
+      <div className="chat-header">
+        <h1>Chat with {other.name}</h1>
+        {match.status === 'approved' && (
+          <button className="link-btn" onClick={unmatch}>
+            Unmatch
+          </button>
+        )}
+      </div>
+      {match.status === 'approved' ? (
+        <p className="muted">Your co-pilots gave this the green light. Take it from here!</p>
+      ) : (
+        <p className="error">This match has ended. This chat is now read-only.</p>
+      )}
 
       <div className="chat-window">
         {messages.map((m) => (
@@ -88,10 +106,12 @@ export default function PilotChat() {
         ))}
         <div ref={bottomRef} />
       </div>
-      <form className="chat-input" onSubmit={send}>
-        <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Message ${other.name}…`} />
-        <button type="submit">Send</button>
-      </form>
+      {match.status === 'approved' && (
+        <form className="chat-input" onSubmit={send}>
+          <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Message ${other.name}…`} />
+          <button type="submit">Send</button>
+        </form>
+      )}
     </div>
   );
 }
