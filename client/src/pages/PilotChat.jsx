@@ -14,31 +14,36 @@ export default function PilotChat() {
   const bottomRef = useRef(null);
 
   useEffect(() => {
-    let socket;
+    let active = true;
+    const socket = getSocket();
+
+    function handleMessage(msg) {
+      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+    }
+    socket.on('pilot-message', handleMessage);
+
     (async () => {
       try {
         const [matchRes, msgRes] = await Promise.all([
           api.get(`/matches/${id}`),
           api.get(`/matches/${id}/pilot-messages`),
         ]);
+        if (!active) return;
         setMatch(matchRes.data.match);
         setMessages(msgRes.data.messages);
       } catch (err) {
-        setError(err.response?.data?.error || 'Could not load this chat');
+        if (active) setError(err.response?.data?.error || 'Could not load this chat');
         return;
       }
 
-      socket = getSocket();
       socket.emit('join-pilot-room', { matchId: id }, (ack) => {
-        if (ack?.error) setError(ack.error);
-      });
-      socket.on('pilot-message', (msg) => {
-        setMessages((prev) => [...prev, msg]);
+        if (ack?.error && active) setError(ack.error);
       });
     })();
 
     return () => {
-      socket?.off('pilot-message');
+      active = false;
+      socket.off('pilot-message', handleMessage);
     };
   }, [id]);
 

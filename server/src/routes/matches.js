@@ -84,10 +84,17 @@ router.post('/swipes', requireAuth, (req, res) => {
   res.json({ ok: true, match });
 });
 
+// Returns matches where the current user is one of the two pilots, or co-pilots for one of them.
 router.get('/matches', requireAuth, (req, res) => {
   const rows = db
-    .prepare('SELECT * FROM matches WHERE pilot_a_id = ? OR pilot_b_id = ? ORDER BY created_at DESC')
-    .all(req.userId, req.userId);
+    .prepare(
+      `SELECT DISTINCT m.* FROM matches m
+       WHERE m.pilot_a_id = ? OR m.pilot_b_id = ?
+          OR m.pilot_a_id IN (SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted')
+          OR m.pilot_b_id IN (SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted')
+       ORDER BY m.created_at DESC`
+    )
+    .all(req.userId, req.userId, req.userId, req.userId);
   res.json({ matches: rows.map((m) => serializeMatch(m, req.userId)) });
 });
 
