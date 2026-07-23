@@ -8,10 +8,12 @@ pilots themselves start chatting.
 
 ## How it works
 
-1. **Sign up & build your pilot profile** — age, bio, location, photo.
+1. **Sign up & build your pilot profile** — age, bio, location, and a
+   photo you upload directly.
 2. **Invite co-pilots** — generate a shareable invite link; a friend who
    accepts it becomes your co-pilot.
-3. **Discover & swipe** — browse other pilots, like or pass.
+3. **Discover & swipe** — browse other pilots (optionally filtered by age
+   range or gender), like or pass.
 4. **Match** — when two pilots like each other, a match is created in
    `copilot_review` status. Pilots themselves can't message yet.
 5. **Co-pilot vetting room** — any co-pilot of either pilot can join a
@@ -23,7 +25,7 @@ pilots themselves start chatting.
 ## Stack
 
 - **Backend**: Node.js, Express, better-sqlite3, Socket.io (real-time chat),
-  JWT auth, bcrypt password hashing.
+  JWT auth, bcrypt password hashing, Multer (photo uploads).
 - **Frontend**: React + Vite, React Router, socket.io-client, axios.
 
 ## Running locally
@@ -48,8 +50,11 @@ npm install
 npm run dev   # http://localhost:5173
 ```
 
-The Vite dev server proxies `/api` and `/socket.io` to the backend, so just
-open http://localhost:5173.
+The Vite dev server proxies `/api`, `/uploads`, and `/socket.io` to the
+backend, so just open http://localhost:5173.
+
+Uploaded profile photos are stored on disk under `server/uploads/` and
+served statically from `/uploads/...`.
 
 ## Trying the full flow
 

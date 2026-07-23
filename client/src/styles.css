@@ -177,12 +177,35 @@ textarea {
   color: var(--muted);
 }
 
+.discover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filters-form {
+  align-items: flex-end;
+}
+
+.filters-form label {
+  flex: 0 0 120px;
+}
+
 .swipe-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
   text-align: center;
+}
+
+.profile-photo-preview {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin-bottom: 8px;
+  display: block;
 }
 
 .swipe-photo {

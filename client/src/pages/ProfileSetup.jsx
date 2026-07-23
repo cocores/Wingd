@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -15,6 +15,9 @@ export default function ProfileSetup() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -34,6 +37,24 @@ export default function ProfileSetup() {
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoError('');
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const { data } = await api.post('/profiles/me/photo', formData);
+      update('photoUrl', data.photoUrl);
+    } catch (err) {
+      setPhotoError(err.response?.data?.error || 'Could not upload photo');
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   }
 
   async function handleSubmit(e) {
@@ -58,6 +79,13 @@ export default function ProfileSetup() {
       <p className="muted">This is what other pilots (and their co-pilots) will see.</p>
       <form className="card form" onSubmit={handleSubmit}>
         <label>
+          Photo
+          {form.photoUrl && <img src={form.photoUrl} alt="Profile" className="profile-photo-preview" />}
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} disabled={uploadingPhoto} />
+          {uploadingPhoto && <span className="muted">Uploading…</span>}
+          {photoError && <span className="error">{photoError}</span>}
+        </label>
+        <label>
           Age
           <input type="number" min={18} value={form.age} onChange={(e) => update('age', e.target.value)} />
         </label>
@@ -76,10 +104,6 @@ export default function ProfileSetup() {
         <label>
           Location
           <input value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="City" />
-        </label>
-        <label>
-          Photo URL
-          <input value={form.photoUrl} onChange={(e) => update('photoUrl', e.target.value)} placeholder="https://…" />
         </label>
         <label>
           Bio

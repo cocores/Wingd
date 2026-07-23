@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 
 import authRoutes from './routes/auth.js';
@@ -9,11 +11,13 @@ import copilotRoutes from './routes/copilots.js';
 import matchRoutes from './routes/matches.js';
 import { attachSocket } from './socket.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
 app.use(cors({ origin: clientOrigin, credentials: true }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
