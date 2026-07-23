@@ -95,6 +95,22 @@ a {
   color: var(--primary);
 }
 
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 .navbar-user {
   display: flex;
   align-items: center;

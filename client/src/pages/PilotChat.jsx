@@ -19,6 +19,7 @@ export default function PilotChat() {
 
     function handleMessage(msg) {
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      api.post(`/matches/${id}/mark-read`, { room: 'pilot' }).catch(() => {});
     }
     socket.on('pilot-message', handleMessage);
 

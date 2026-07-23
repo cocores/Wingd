@@ -93,9 +93,9 @@ router.post('/swipes', requireAuth, (req, res) => {
   res.json({ ok: true, match });
 });
 
-// Returns matches where the current user is one of the two pilots, or co-pilots for one of them.
-router.get('/matches', requireAuth, (req, res) => {
-  const rows = db
+// Raw match rows where the user is one of the two pilots, or co-pilots for one of them.
+function getAccessibleMatchRows(userId) {
+  return db
     .prepare(
       `SELECT DISTINCT m.* FROM matches m
        WHERE m.pilot_a_id = ? OR m.pilot_b_id = ?
@@ -103,7 +103,11 @@ router.get('/matches', requireAuth, (req, res) => {
           OR m.pilot_b_id IN (SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted')
        ORDER BY m.created_at DESC`
     )
-    .all(req.userId, req.userId, req.userId, req.userId);
+    .all(userId, userId, userId, userId);
+}
+
+router.get('/matches', requireAuth, (req, res) => {
+  const rows = getAccessibleMatchRows(req.userId);
   res.json({ matches: rows.map((m) => serializeMatch(m, req.userId)) });
 });
 
@@ -193,6 +197,28 @@ router.post('/matches/:id/unmatch', requireAuth, (req, res) => {
   res.json({ match: serializeMatch(updated, req.userId) });
 });
 
+function markChatRead(userId, matchId, room) {
+  db.prepare(
+    `INSERT INTO chat_reads (user_id, match_id, room, last_read_at) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id, match_id, room) DO UPDATE SET last_read_at = datetime('now')`
+  ).run(userId, matchId, room);
+}
+
+// Lets an open chat window keep marking itself read as live messages arrive over the socket.
+router.post('/matches/:id/mark-read', requireAuth, (req, res) => {
+  const match = getMatchOr404(req, res);
+  if (!match) return;
+  const { room } = req.body;
+  if (room === 'copilot' && canAccessCopilotRoom(req.userId, match)) {
+    markChatRead(req.userId, match.id, 'copilot');
+  } else if (room === 'pilot' && isPilotOfMatch(req.userId, match)) {
+    markChatRead(req.userId, match.id, 'pilot');
+  } else {
+    return res.status(403).json({ error: 'Not authorized for this room' });
+  }
+  res.json({ ok: true });
+});
+
 router.get('/matches/:id/copilot-messages', requireAuth, (req, res) => {
   const match = getMatchOr404(req, res);
   if (!match) return;
@@ -206,6 +232,7 @@ router.get('/matches/:id/copilot-messages', requireAuth, (req, res) => {
        WHERE cm.match_id = ? ORDER BY cm.created_at ASC`
     )
     .all(match.id);
+  markChatRead(req.userId, match.id, 'copilot');
   res.json({ messages: rows });
 });
 
@@ -225,8 +252,9 @@ router.get('/matches/:id/pilot-messages', requireAuth, (req, res) => {
        WHERE pm.match_id = ? ORDER BY pm.created_at ASC`
     )
     .all(match.id);
+  markChatRead(req.userId, match.id, 'pilot');
   res.json({ messages: rows });
 });
 
-export { isCopilotOf, canAccessCopilotRoom, isPilotOfMatch };
+export { isCopilotOf, canAccessCopilotRoom, isPilotOfMatch, getAccessibleMatchRows, markChatRead };
 export default router;

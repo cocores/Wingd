@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useNotifications } from '../context/NotificationsContext.jsx';
 
 export default function Discover() {
+  const { refresh: refreshNotifications } = useNotifications();
   const [profiles, setProfiles] = useState([]);
   const [index, setIndex] = useState(0);
   const [matchNotice, setMatchNotice] = useState(null);
@@ -47,6 +49,7 @@ export default function Discover() {
     const { data } = await api.post('/swipes', { targetUserId: target.userId, direction });
     if (data.match) {
       setMatchNotice(data.match);
+      refreshNotifications();
     }
     setIndex((i) => i + 1);
   }

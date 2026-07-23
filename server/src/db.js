@@ -79,6 +79,23 @@ CREATE TABLE IF NOT EXISTS pilot_messages (
   body TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Per-user "last seen" markers for list-level notification badges.
+CREATE TABLE IF NOT EXISTS notification_state (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  matches_seen_at TEXT NOT NULL DEFAULT '1970-01-01 00:00:00',
+  copilots_seen_at TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'
+);
+
+-- Per-user, per-match, per-room read markers for chat unread counts.
+CREATE TABLE IF NOT EXISTS chat_reads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  room TEXT NOT NULL, -- copilot | pilot
+  last_read_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, match_id, room)
+);
 `);
 
 export default db;

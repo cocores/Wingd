@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationsContext.jsx';
 
 function otherName(match, userId) {
   if (match.isPilot) {
@@ -14,10 +15,12 @@ const TERMINAL_STATUSES = ['rejected', 'unmatched'];
 
 export default function Matches() {
   const { user } = useAuth();
+  const { refresh: refreshNotifications } = useNotifications();
   const [matches, setMatches] = useState([]);
 
   useEffect(() => {
     load();
+    api.post('/notifications/mark-matches-seen').then(refreshNotifications);
   }, []);
 
   async function load() {

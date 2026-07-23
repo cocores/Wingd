@@ -19,6 +19,7 @@ export default function CopilotChat() {
 
     function handleMessage(msg) {
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      api.post(`/matches/${id}/mark-read`, { room: 'copilot' }).catch(() => {});
     }
     socket.on('copilot-message', handleMessage);
 

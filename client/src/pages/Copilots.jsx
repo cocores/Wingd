@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { useNotifications } from '../context/NotificationsContext.jsx';
 
 export default function Copilots() {
+  const { refresh: refreshNotifications } = useNotifications();
   const [copilots, setCopilots] = useState([]);
   const [pilotingFor, setPilotingFor] = useState([]);
   const [relationshipLabel, setRelationshipLabel] = useState('');
@@ -10,6 +12,7 @@ export default function Copilots() {
 
   useEffect(() => {
     load();
+    api.post('/notifications/mark-copilots-seen').then(refreshNotifications);
   }, []);
 
   async function load() {

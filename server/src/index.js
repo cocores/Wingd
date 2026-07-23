@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profiles.js';
 import copilotRoutes from './routes/copilots.js';
 import matchRoutes from './routes/matches.js';
+import notificationRoutes from './routes/notifications.js';
 import { attachSocket } from './socket.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/copilots', copilotRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api', matchRoutes);
 
 app.use((err, req, res, next) => {

@@ -21,6 +21,13 @@ pilots themselves start chatting.
    side's co-pilots can vouch (✔) or call it off (✕).
 6. **Pilot chat unlocks** — once both sides' co-pilots vouch, the match
    flips to `approved` and the two pilots get their own private chat.
+7. **Anyone can walk away** — a co-pilot can withdraw a vouch at any time
+   (dropping an already-approved match back to co-pilot review), and either
+   pilot can unmatch outright, which ends the match for good.
+
+Nav badges keep everyone in the loop: new matches, unread co-pilot/pilot
+messages, and new co-pilot invite acceptances all show up as counts next to
+**Matches** and **Co-pilots**.
 
 ## Stack
 
