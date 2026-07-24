@@ -10,5 +10,9 @@ export function setAuthToken(token) {
   }
 }
 
+export function getErrorMessage(err, fallback) {
+  return err.response?.data?.error || fallback;
+}
+
 const savedToken = localStorage.getItem('wingd_token');
 if (savedToken) setAuthToken(savedToken);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Signup() {
@@ -21,7 +21,7 @@ export default function Signup() {
       loginWithToken(data.token, data.user);
       navigate('/profile');
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      setError(getErrorMessage(err, 'Something went wrong'));
     } finally {
       setSubmitting(false);
     }

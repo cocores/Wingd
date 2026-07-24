@@ -26,6 +26,35 @@ const upload = multer({
 
 const router = express.Router();
 
+const PROFILE_COLUMNS = {
+  age: 'age',
+  gender: 'gender',
+  interestedIn: 'interested_in',
+  bio: 'bio',
+  location: 'location',
+  photoUrl: 'photo_url',
+};
+
+// Partial upsert: only the keys present in `fields` are written, so a photo
+// upload can update just photo_url without touching the rest of the profile.
+function upsertProfile(userId, fields) {
+  const keys = Object.keys(fields);
+  const values = keys.map((k) => fields[k] ?? null);
+  const existing = db.prepare('SELECT id FROM pilot_profiles WHERE user_id = ?').get(userId);
+
+  if (existing) {
+    const setClause = keys.map((k) => `${PROFILE_COLUMNS[k]} = ?`).join(', ');
+    db.prepare(`UPDATE pilot_profiles SET ${setClause}, updated_at = datetime('now') WHERE user_id = ?`).run(...values, userId);
+  } else {
+    const columns = ['user_id', ...keys.map((k) => PROFILE_COLUMNS[k])];
+    db.prepare(
+      `INSERT INTO pilot_profiles (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`
+    ).run(userId, ...values);
+  }
+
+  return db.prepare('SELECT * FROM pilot_profiles WHERE user_id = ?').get(userId);
+}
+
 router.get('/me', requireAuth, (req, res) => {
   const profile = db.prepare('SELECT * FROM pilot_profiles WHERE user_id = ?').get(req.userId);
   res.json({ profile: profile || null });
@@ -33,22 +62,7 @@ router.get('/me', requireAuth, (req, res) => {
 
 router.put('/me', requireAuth, (req, res) => {
   const { age, gender, interestedIn, bio, location, photoUrl } = req.body;
-  const existing = db.prepare('SELECT id FROM pilot_profiles WHERE user_id = ?').get(req.userId);
-
-  if (existing) {
-    db.prepare(
-      `UPDATE pilot_profiles
-       SET age = ?, gender = ?, interested_in = ?, bio = ?, location = ?, photo_url = ?, updated_at = datetime('now')
-       WHERE user_id = ?`
-    ).run(age ?? null, gender ?? null, interestedIn ?? null, bio ?? null, location ?? null, photoUrl ?? null, req.userId);
-  } else {
-    db.prepare(
-      `INSERT INTO pilot_profiles (user_id, age, gender, interested_in, bio, location, photo_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(req.userId, age ?? null, gender ?? null, interestedIn ?? null, bio ?? null, location ?? null, photoUrl ?? null);
-  }
-
-  const profile = db.prepare('SELECT * FROM pilot_profiles WHERE user_id = ?').get(req.userId);
+  const profile = upsertProfile(req.userId, { age, gender, interestedIn, bio, location, photoUrl });
   res.json({ profile });
 });
 
@@ -58,15 +72,7 @@ router.post('/me/photo', requireAuth, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
 
     const photoUrl = `/uploads/${req.file.filename}`;
-    const existing = db.prepare('SELECT id FROM pilot_profiles WHERE user_id = ?').get(req.userId);
-    if (existing) {
-      db.prepare(`UPDATE pilot_profiles SET photo_url = ?, updated_at = datetime('now') WHERE user_id = ?`).run(
-        photoUrl,
-        req.userId
-      );
-    } else {
-      db.prepare('INSERT INTO pilot_profiles (user_id, photo_url) VALUES (?, ?)').run(req.userId, photoUrl);
-    }
+    upsertProfile(req.userId, { photoUrl });
     res.json({ photoUrl });
   });
 });

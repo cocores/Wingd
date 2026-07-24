@@ -1,70 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { getSocket } from '../socket';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useMatchChat } from '../hooks/useMatchChat.js';
 
 export default function CopilotChat() {
   const { id } = useParams();
   const { user } = useAuth();
-  const [match, setMatch] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const { match, messages, error, bottomRef, send, refetchMatch } = useMatchChat(id, 'copilot');
   const [body, setBody] = useState('');
-  const [error, setError] = useState('');
-  const bottomRef = useRef(null);
 
-  useEffect(() => {
-    let active = true;
-    const socket = getSocket();
-
-    function handleMessage(msg) {
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-      api.post(`/matches/${id}/mark-read`, { room: 'copilot' }).catch(() => {});
-    }
-    socket.on('copilot-message', handleMessage);
-
-    (async () => {
-      try {
-        const [matchRes, msgRes] = await Promise.all([
-          api.get(`/matches/${id}`),
-          api.get(`/matches/${id}/copilot-messages`),
-        ]);
-        if (!active) return;
-        setMatch(matchRes.data.match);
-        setMessages(msgRes.data.messages);
-      } catch (err) {
-        if (active) setError(err.response?.data?.error || 'Could not load this chat');
-        return;
-      }
-
-      socket.emit('join-copilot-room', { matchId: id }, (ack) => {
-        if (ack?.error && active) setError(ack.error);
-      });
-    })();
-
-    return () => {
-      active = false;
-      socket.off('copilot-message', handleMessage);
-    };
-  }, [id]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  function send(e) {
+  function handleSend(e) {
     e.preventDefault();
     if (!body.trim()) return;
-    getSocket().emit('copilot-message', { matchId: id, body }, (ack) => {
-      if (ack?.error) setError(ack.error);
-    });
+    send(body);
     setBody('');
   }
 
   async function respond(action) {
     await api.post(`/matches/${id}/${action}`);
-    const { data } = await api.get(`/matches/${id}`);
-    setMatch(data.match);
+    await refetchMatch();
   }
 
   if (error) {
@@ -89,7 +44,7 @@ export default function CopilotChat() {
         start talking.
       </p>
 
-      {(match.status === 'copilot_review' || match.status === 'approved') && !match.myApproved && (
+      {match.canVouch && (
         <div className="vouch-bar">
           <button className="approve" onClick={() => respond('approve')}>
             Vouch for this match ✔
@@ -99,14 +54,14 @@ export default function CopilotChat() {
           </button>
         </div>
       )}
-      {(match.status === 'copilot_review' || match.status === 'approved') && match.myApproved && (
+      {match.canWithdraw && (
         <div className="vouch-bar">
           <button className="reject" onClick={() => respond('withdraw')}>
             Withdraw vouch
           </button>
         </div>
       )}
-      {match.status === 'approved' && <p className="success">Both sides' co-pilots approved — the pilots can now chat directly!</p>}
+      {match.chatUnlocked && <p className="success">Both sides' co-pilots approved — the pilots can now chat directly!</p>}
       {match.status === 'rejected' && <p className="error">This match was called off by a co-pilot.</p>}
       {match.status === 'unmatched' && <p className="error">One of the pilots unmatched. This chat is now read-only.</p>}
 
@@ -119,7 +74,7 @@ export default function CopilotChat() {
         ))}
         <div ref={bottomRef} />
       </div>
-      <form className="chat-input" onSubmit={send}>
+      <form className="chat-input" onSubmit={handleSend}>
         <input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message the other co-pilots…" />
         <button type="submit">Send</button>
       </form>

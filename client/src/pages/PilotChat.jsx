@@ -1,63 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { getSocket } from '../socket';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useMatchChat } from '../hooks/useMatchChat.js';
 
 export default function PilotChat() {
   const { id } = useParams();
   const { user } = useAuth();
-  const [match, setMatch] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const { match, messages, error, bottomRef, send, refetchMatch } = useMatchChat(id, 'pilot');
   const [body, setBody] = useState('');
-  const [error, setError] = useState('');
-  const bottomRef = useRef(null);
 
-  useEffect(() => {
-    let active = true;
-    const socket = getSocket();
-
-    function handleMessage(msg) {
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-      api.post(`/matches/${id}/mark-read`, { room: 'pilot' }).catch(() => {});
-    }
-    socket.on('pilot-message', handleMessage);
-
-    (async () => {
-      try {
-        const [matchRes, msgRes] = await Promise.all([
-          api.get(`/matches/${id}`),
-          api.get(`/matches/${id}/pilot-messages`),
-        ]);
-        if (!active) return;
-        setMatch(matchRes.data.match);
-        setMessages(msgRes.data.messages);
-      } catch (err) {
-        if (active) setError(err.response?.data?.error || 'Could not load this chat');
-        return;
-      }
-
-      socket.emit('join-pilot-room', { matchId: id }, (ack) => {
-        if (ack?.error && active) setError(ack.error);
-      });
-    })();
-
-    return () => {
-      active = false;
-      socket.off('pilot-message', handleMessage);
-    };
-  }, [id]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  function send(e) {
+  function handleSend(e) {
     e.preventDefault();
     if (!body.trim()) return;
-    getSocket().emit('pilot-message', { matchId: id, body }, (ack) => {
-      if (ack?.error) setError(ack.error);
-    });
+    send(body);
     setBody('');
   }
 
@@ -77,8 +33,7 @@ export default function PilotChat() {
   async function unmatch() {
     if (!window.confirm(`Unmatch with ${other.name}? This ends the match.`)) return;
     await api.post(`/matches/${id}/unmatch`);
-    const { data } = await api.get(`/matches/${id}`);
-    setMatch(data.match);
+    await refetchMatch();
   }
 
   return (
@@ -86,13 +41,13 @@ export default function PilotChat() {
       <Link to="/matches">← Back to matches</Link>
       <div className="chat-header">
         <h1>Chat with {other.name}</h1>
-        {match.status === 'approved' && (
+        {match.chatUnlocked && (
           <button className="link-btn" onClick={unmatch}>
             Unmatch
           </button>
         )}
       </div>
-      {match.status === 'approved' ? (
+      {match.chatUnlocked ? (
         <p className="muted">Your co-pilots gave this the green light. Take it from here!</p>
       ) : (
         <p className="error">This match has ended. This chat is now read-only.</p>
@@ -107,8 +62,8 @@ export default function PilotChat() {
         ))}
         <div ref={bottomRef} />
       </div>
-      {match.status === 'approved' && (
-        <form className="chat-input" onSubmit={send}>
+      {match.chatUnlocked && (
+        <form className="chat-input" onSubmit={handleSend}>
           <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Message ${other.name}…`} />
           <button type="submit">Send</button>
         </form>

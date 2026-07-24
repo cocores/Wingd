@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function AcceptInvite() {
@@ -19,7 +19,7 @@ export default function AcceptInvite() {
         const { data } = await api.get(`/copilots/invites/${code}`);
         setInvite(data.invite);
       } catch (err) {
-        setError(err.response?.data?.error || 'Invite not found');
+        setError(getErrorMessage(err, 'Invite not found'));
       }
     })();
   }, [code, user, authLoading]);
@@ -30,7 +30,7 @@ export default function AcceptInvite() {
       await api.post(`/copilots/invites/${code}/accept`);
       setAccepted(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not accept invite');
+      setError(getErrorMessage(err, 'Could not accept invite'));
     }
   }
 

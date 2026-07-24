@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function ProfileSetup() {
@@ -50,7 +50,7 @@ export default function ProfileSetup() {
       const { data } = await api.post('/profiles/me/photo', formData);
       update('photoUrl', data.photoUrl);
     } catch (err) {
-      setPhotoError(err.response?.data?.error || 'Could not upload photo');
+      setPhotoError(getErrorMessage(err, 'Could not upload photo'));
     } finally {
       setUploadingPhoto(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -67,7 +67,7 @@ export default function ProfileSetup() {
       setHasProfile(true);
       setSaved(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not save profile');
+      setError(getErrorMessage(err, 'Could not save profile'));
     } finally {
       setSubmitting(false);
     }
