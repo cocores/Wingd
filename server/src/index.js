@@ -10,6 +10,7 @@ import profileRoutes from './routes/profiles.js';
 import copilotRoutes from './routes/copilots.js';
 import matchRoutes from './routes/matches.js';
 import notificationRoutes from './routes/notifications.js';
+import geoRoutes from './routes/geo.js';
 import { attachSocket } from './socket.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/copilots', copilotRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/geo', geoRoutes);
 app.use('/api', matchRoutes);
 
 app.use((err, req, res, next) => {

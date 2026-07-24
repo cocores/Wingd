@@ -8,8 +8,9 @@ pilots themselves start chatting.
 
 ## How it works
 
-1. **Sign up & build your pilot profile** — age, bio, location, and a
-   photo you upload directly.
+1. **Sign up & build your pilot profile** — age, bio, a photo you upload
+   directly, and a location you can either type (with city suggestions after
+   3 characters) or detect automatically from your browser.
 2. **Invite co-pilots** — generate a shareable invite link; a friend who
    accepts it becomes your co-pilot.
 3. **Discover & swipe** — browse other pilots (optionally filtered by age
@@ -32,7 +33,8 @@ messages, and new co-pilot invite acceptances all show up as counts next to
 ## Stack
 
 - **Backend**: Node.js, Express, better-sqlite3, Socket.io (real-time chat),
-  JWT auth, bcrypt password hashing, Multer (photo uploads).
+  JWT auth, bcrypt password hashing, Multer (photo uploads), a small proxy to
+  OpenStreetMap's Nominatim for location search/detection (no API key needed).
 - **Frontend**: React + Vite, React Router, socket.io-client, axios.
 
 ## Running locally

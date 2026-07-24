@@ -173,6 +173,55 @@ textarea {
   font-family: inherit;
 }
 
+.location-input {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.location-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.location-input-row input {
+  flex: 1;
+}
+
+.location-input-row button {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.location-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.location-suggestions li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.location-suggestions li:hover {
+  background: var(--border);
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
+import LocationInput from '../components/LocationInput.jsx';
 
 export default function ProfileSetup() {
   const { setHasProfile } = useAuth();
@@ -103,7 +104,7 @@ export default function ProfileSetup() {
         </label>
         <label>
           Location
-          <input value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="City" />
+          <LocationInput value={form.location} onChange={(value) => update('location', value)} />
         </label>
         <label>
           Bio
