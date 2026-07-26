@@ -8,9 +8,10 @@ pilots themselves start chatting.
 
 ## How it works
 
-1. **Sign up & build your pilot profile** — age, bio, a photo you upload
-   directly, and a location you can either type (with city suggestions after
-   3 characters) or detect automatically from your browser.
+1. **Sign up & build your pilot profile** — with email/password, or one tap
+   via Google or Apple — then add your age, bio, a photo you upload directly,
+   and a location you can either type (with city suggestions after 3
+   characters) or detect automatically from your browser.
 2. **Invite co-pilots** — generate a shareable invite link; a friend who
    accepts it becomes your co-pilot.
 3. **Discover & swipe** — browse other pilots (optionally filtered by age
@@ -33,8 +34,9 @@ messages, and new co-pilot invite acceptances all show up as counts next to
 ## Stack
 
 - **Backend**: Node.js, Express, better-sqlite3, Socket.io (real-time chat),
-  JWT auth, bcrypt password hashing, Multer (photo uploads), a small proxy to
-  OpenStreetMap's Nominatim for location search/detection (no API key needed).
+  JWT auth, bcrypt password hashing, Google/Apple social sign-in verified
+  server-side, Multer (photo uploads), a small proxy to OpenStreetMap's
+  Nominatim for location search/detection (no API key needed).
 - **Frontend**: React + Vite, React Router, socket.io-client, axios.
 
 ## Running locally
@@ -65,6 +67,39 @@ backend, so just open http://localhost:5173.
 Uploaded profile photos are stored on disk under `server/uploads/` and
 served statically from `/uploads/...`.
 
+### 3. Social login (optional)
+
+Email/password works with no setup. To turn on the "Continue with Google" /
+"Continue with Apple" buttons, set matching client IDs on both sides — leaving
+either pair blank keeps that provider's button hidden and its `/auth/*`
+endpoint disabled.
+
+**Google:**
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create an OAuth 2.0 Client ID of type "Web application".
+2. Add `http://localhost:5173` as an authorized JavaScript origin.
+3. Set the same client ID as both `GOOGLE_CLIENT_ID` in `server/.env` and
+   `VITE_GOOGLE_CLIENT_ID` in `client/.env`.
+
+**Apple:**
+1. In the [Apple Developer portal](https://developer.apple.com/account/resources/identifiers/list/serviceId),
+   create a Services ID (this is the identifier used as the client ID for
+   web Sign in with Apple) and enable "Sign in with Apple" on it.
+2. Register `http://localhost:5173` as a website domain/return URL for that
+   Services ID (Apple requires HTTPS for real domains, but `localhost` is
+   allowed for local testing).
+3. Set the Services ID identifier as both `APPLE_CLIENT_ID` in
+   `server/.env` and `VITE_APPLE_CLIENT_ID` in `client/.env`.
+
+Both providers hand the frontend an ID token (a signed JWT), which the
+backend verifies independently — Google's via `google-auth-library`, Apple's
+against Apple's published JWKS — before creating or linking a user. Sign-in
+never trusts the frontend's claim of who the user is, only the verified
+token. A social sign-in links onto an existing account with the same email;
+if the email is new, a fresh account is created with no password (so that
+user always signs in with the same provider afterwards, or sets a password
+later if this app grows a "set password" flow).
+
 ## Trying the full flow
 
 1. Sign up two accounts (the two pilots) and fill out their profiles.
@@ -79,7 +114,8 @@ served statically from `/uploads/...`.
 
 ## Data model
 
-- `users` — one account per person (can be a pilot and/or a co-pilot).
+- `users` — one account per person (can be a pilot and/or a co-pilot);
+  `password_hash` is null for accounts created via Google/Apple sign-in.
 - `pilot_profiles` — one dating profile per user.
 - `copilot_links` — invite + acceptance linking a co-pilot to a pilot.
 - `swipes` / `matches` — like/pass history and resulting matches.

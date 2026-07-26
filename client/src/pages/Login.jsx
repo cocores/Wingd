@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
+import SocialLogin from '../components/SocialLogin.jsx';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -26,12 +27,19 @@ export default function Login() {
     }
   }
 
+  function handleSocialSuccess(data) {
+    setError('');
+    loginWithToken(data.token, data.user);
+    navigate('/discover');
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
         <h1>🛩️ Wingd</h1>
         <p className="subtitle">Fly with your co-pilots.</p>
-        <form onSubmit={handleSubmit}>
+        <SocialLogin onSuccess={handleSocialSuccess} onError={setError} />
+        <form className="form" onSubmit={handleSubmit}>
           <label>
             Email
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

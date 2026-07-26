@@ -13,8 +13,10 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   name TEXT NOT NULL,
+  google_id TEXT UNIQUE,
+  apple_id TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -97,5 +99,34 @@ CREATE TABLE IF NOT EXISTS chat_reads (
   UNIQUE(user_id, match_id, room)
 );
 `);
+
+// Migrate databases created before social login support: add the new
+// nullable columns and drop the NOT NULL constraint on password_hash (SQLite
+// can't ALTER a column's nullability directly, so the table is rebuilt).
+const userColumns = db.prepare("PRAGMA table_info(users)").all();
+const hasGoogleId = userColumns.some((c) => c.name === 'google_id');
+const passwordHashRequired = userColumns.some((c) => c.name === 'password_hash' && c.notnull);
+if (!hasGoogleId || passwordHashRequired) {
+  // Dropping `users` while foreign_keys is ON would cascade-delete every row
+  // in tables that reference it (pilot_profiles, matches, ...) per SQLite's
+  // documented DROP TABLE behavior, so disable enforcement for the rebuild.
+  db.pragma('foreign_keys = OFF');
+  db.exec(`
+    CREATE TABLE users_migrated (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      name TEXT NOT NULL,
+      google_id TEXT UNIQUE,
+      apple_id TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO users_migrated (id, email, password_hash, name, created_at)
+      SELECT id, email, password_hash, name, created_at FROM users;
+    DROP TABLE users;
+    ALTER TABLE users_migrated RENAME TO users;
+  `);
+  db.pragma('foreign_keys = ON');
+}
 
 export default db;

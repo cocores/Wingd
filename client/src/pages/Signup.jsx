@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
+import SocialLogin from '../components/SocialLogin.jsx';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -27,12 +28,19 @@ export default function Signup() {
     }
   }
 
+  function handleSocialSuccess(data) {
+    setError('');
+    loginWithToken(data.token, data.user);
+    navigate('/profile');
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
         <h1>🛩️ Wingd</h1>
         <p className="subtitle">Every pilot needs a wing-team.</p>
-        <form onSubmit={handleSubmit}>
+        <SocialLogin onSuccess={handleSocialSuccess} onError={setError} />
+        <form className="form" onSubmit={handleSubmit}>
           <label>
             Name
             <input value={name} onChange={(e) => setName(e.target.value)} required />
