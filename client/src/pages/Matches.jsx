@@ -11,6 +11,17 @@ function otherName(match, userId) {
   return `${match.pilotA.name} & ${match.pilotB.name}`;
 }
 
+const FLIGHT_STATUS_LABELS = {
+  copilot_review: 'Boarding',
+  approved: 'Cleared for takeoff',
+  rejected: 'Grounded',
+  unmatched: 'Landed',
+};
+
+function statusLabel(status) {
+  return FLIGHT_STATUS_LABELS[status] || status.replace('_', ' ');
+}
+
 export default function Matches() {
   const { user } = useAuth();
   const { refresh: refreshNotifications } = useNotifications();
@@ -46,7 +57,7 @@ export default function Matches() {
           <li key={m.id} className="card match-row">
             <div>
               <strong>{otherName(m, user.id)}</strong>
-              <span className={`badge ${m.status}`}>{m.status.replace('_', ' ')}</span>
+              <span className={`badge ${m.status}`}>{statusLabel(m.status)}</span>
             </div>
             <div className="match-approvals">
               <span className={m.aApproved ? 'approved' : m.aRejected ? 'rejected' : ''}>

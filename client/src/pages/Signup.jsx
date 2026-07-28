@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import SocialLogin from '../components/SocialLogin.jsx';
+import AuthHero from '../components/AuthHero.jsx';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -37,7 +38,8 @@ export default function Signup() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>🛩️ Wingd</h1>
+        <AuthHero />
+        <h1>Wingd</h1>
         <p className="subtitle">Every pilot needs a wing-team.</p>
         <SocialLogin onSuccess={handleSocialSuccess} onError={setError} />
         <form className="form" onSubmit={handleSubmit}>
@@ -54,7 +56,7 @@ export default function Signup() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
           </label>
           {error && <p className="error">{error}</p>}
-          <button type="submit" disabled={submitting}>
+          <button type="submit" className="primary" disabled={submitting}>
             {submitting ? 'Creating account…' : 'Sign up'}
           </button>
         </form>
