@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
+import { resolveAssetUrl } from '../config.js';
 
 export default function Discover() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -107,7 +108,7 @@ export default function Discover() {
         </div>
       ) : (
         <div className="swipe-card">
-          {current.photoUrl && <img src={current.photoUrl} alt={current.name} className="swipe-photo" />}
+          {current.photoUrl && <img src={resolveAssetUrl(current.photoUrl)} alt={current.name} className="swipe-photo" />}
           <h2>
             {current.name}
             {current.age ? `, ${current.age}` : ''}

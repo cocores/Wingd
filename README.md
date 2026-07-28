@@ -100,6 +100,44 @@ if the email is new, a fresh account is created with no password (so that
 user always signs in with the same provider afterwards, or sets a password
 later if this app grows a "set password" flow).
 
+## Deploying
+
+The frontend (a static Vite build) and backend (a stateful Express process
+with Socket.io and a SQLite file on disk) need to be deployed separately —
+there's no single serverless platform that fits both.
+
+### Frontend on Vercel
+
+`vercel.json` at the repo root already tells Vercel how to build `client/`
+and serves `index.html` for every route (so React Router's client-side
+routes don't 404 on refresh) — importing this repo with the project's Root
+Directory left at the repo root just works. Set these two things in the
+Vercel project's environment variables:
+
+- `VITE_API_URL` — the backend's full origin (see below), no trailing slash.
+- Any social login vars from `client/.env.example` you want enabled.
+
+Without `VITE_API_URL` set, the deployed frontend has nowhere to send API
+calls and nothing will load past the login screen.
+
+### Backend: needs a host that runs a persistent process
+
+Vercel's serverless functions can't hold the WebSocket connections Socket.io
+needs, and their filesystem doesn't persist writes to `wingd.db` between
+requests — so the backend needs somewhere like Render, Railway, or Fly.io
+instead. Whichever you pick:
+
+1. Deploy the `server/` directory with `npm install` / `npm start`.
+2. Set its environment variables from `server/.env.example`, with
+   `CLIENT_ORIGIN` set to your Vercel frontend's URL (this is also what
+   CORS and Socket.io use to decide which origin may connect).
+3. Point the Vercel frontend's `VITE_API_URL` at this backend's URL.
+
+`server/wingd.db` and `server/uploads/` are both local disk — most of these
+hosts wipe or don't persist local disk across deploys/restarts, so for
+anything beyond a demo, swap `better-sqlite3` for a hosted database and
+`multer`'s disk storage for something like S3 or Cloudinary.
+
 ## Trying the full flow
 
 1. Sign up two accounts (the two pilots) and fill out their profiles.

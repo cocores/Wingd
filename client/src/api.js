@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { API_BASE_URL } from './config.js';
 
-export const api = axios.create({ baseURL: '/api' });
+export const api = axios.create({ baseURL: `${API_BASE_URL}/api` });
 
 export function setAuthToken(token) {
   if (token) {

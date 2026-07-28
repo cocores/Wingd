@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationInput from '../components/LocationInput.jsx';
+import { resolveAssetUrl } from '../config.js';
 
 export default function ProfileSetup() {
   const { setHasProfile } = useAuth();
@@ -81,7 +82,7 @@ export default function ProfileSetup() {
       <form className="card form" onSubmit={handleSubmit}>
         <label>
           Photo
-          {form.photoUrl && <img src={form.photoUrl} alt="Profile" className="profile-photo-preview" />}
+          {form.photoUrl && <img src={resolveAssetUrl(form.photoUrl)} alt="Profile" className="profile-photo-preview" />}
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} disabled={uploadingPhoto} />
           {uploadingPhoto && <span className="muted">Uploading…</span>}
           {photoError && <span className="error">{photoError}</span>}
