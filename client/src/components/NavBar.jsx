@@ -28,8 +28,12 @@ export default function NavBar() {
           Matches
           <Badge count={summary.newMatches + summary.unreadMessages} />
         </NavLink>
+        <NavLink to="/wing-queue">
+          Wing queue
+          <Badge count={summary.pendingVotes} />
+        </NavLink>
         <NavLink to="/copilots">
-          Co-pilots
+          Wing circle
           <Badge count={summary.newCopilotAcceptances} />
         </NavLink>
         <NavLink to="/profile">Profile</NavLink>
