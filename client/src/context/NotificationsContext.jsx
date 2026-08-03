@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext.jsx';
 
 const NotificationsContext = createContext(null);
 
-const EMPTY = { newMatches: 0, unreadMessages: 0, newCopilotAcceptances: 0 };
+const EMPTY = { newMatches: 0, unreadMessages: 0, newCopilotAcceptances: 0, pendingVotes: 0 };
 const POLL_MS = 15000;
 
 export function NotificationsProvider({ children }) {

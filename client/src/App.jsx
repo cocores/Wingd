@@ -8,7 +8,8 @@ import Discover from './pages/Discover.jsx';
 import Copilots from './pages/Copilots.jsx';
 import AcceptInvite from './pages/AcceptInvite.jsx';
 import Matches from './pages/Matches.jsx';
-import CopilotChat from './pages/CopilotChat.jsx';
+import WingQueue from './pages/WingQueue.jsx';
+import WingChat from './pages/WingChat.jsx';
 import PilotChat from './pages/PilotChat.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
@@ -57,10 +58,18 @@ export default function App() {
           }
         />
         <Route
-          path="/matches/:id/copilot-chat"
+          path="/wing-queue"
           element={
             <ProtectedRoute>
-              <CopilotChat />
+              <WingQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/interests/:id/chat"
+          element={
+            <ProtectedRoute>
+              <WingChat />
             </ProtectedRoute>
           }
         />

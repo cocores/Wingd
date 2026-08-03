@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { Link } from 'react-router-dom';
+import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
 
 export default function Copilots() {
@@ -9,6 +10,8 @@ export default function Copilots() {
   const [relationshipLabel, setRelationshipLabel] = useState('');
   const [copilotEmail, setCopilotEmail] = useState('');
   const [latestInviteLink, setLatestInviteLink] = useState('');
+  const [circle, setCircle] = useState({ maxCircleSize: 5, acceptedCount: 0 });
+  const [inviteError, setInviteError] = useState('');
 
   useEffect(() => {
     load();
@@ -19,17 +22,25 @@ export default function Copilots() {
     const [mine, piloting] = await Promise.all([api.get('/copilots/mine'), api.get('/copilots/piloting-for')]);
     setCopilots(mine.data.copilots);
     setPilotingFor(piloting.data.pilots);
+    setCircle({ maxCircleSize: mine.data.maxCircleSize, acceptedCount: mine.data.acceptedCount });
   }
 
   async function createInvite(e) {
     e.preventDefault();
-    const { data } = await api.post('/copilots/invites', { relationshipLabel, copilotEmail });
-    const link = `${window.location.origin}/invite/${data.inviteCode}`;
-    setLatestInviteLink(link);
-    setRelationshipLabel('');
-    setCopilotEmail('');
-    load();
+    setInviteError('');
+    try {
+      const { data } = await api.post('/copilots/invites', { relationshipLabel, copilotEmail });
+      const link = `${window.location.origin}/invite/${data.inviteCode}`;
+      setLatestInviteLink(link);
+      setRelationshipLabel('');
+      setCopilotEmail('');
+      load();
+    } catch (err) {
+      setInviteError(getErrorMessage(err, 'Could not create invite'));
+    }
   }
+
+  const circleFull = circle.acceptedCount >= circle.maxCircleSize;
 
   async function removeLink(id) {
     await api.delete(`/copilots/${id}`);
@@ -38,26 +49,34 @@ export default function Copilots() {
 
   return (
     <div className="page">
-      <h1>Co-pilots</h1>
-      <p className="muted">Co-pilots are the friends who vouch for you and chat with your matches' co-pilots before you dive in.</p>
+      <h1>Your wing circle</h1>
+      <p className="muted">
+        Bring 2–5 of your best friends along as your wingmen. They vote on who you're interested in before it's ever sent, and you'll see how many
+        vouched (and what they said) once you match. ({circle.acceptedCount} of {circle.maxCircleSize})
+      </p>
 
       <div className="card">
-        <h3>Invite a co-pilot</h3>
-        <form className="form form-inline" onSubmit={createInvite}>
-          <label>
-            Their name / relationship
-            <input
-              value={relationshipLabel}
-              onChange={(e) => setRelationshipLabel(e.target.value)}
-              placeholder="e.g. Best friend Sam"
-            />
-          </label>
-          <label>
-            Their email (optional)
-            <input type="email" value={copilotEmail} onChange={(e) => setCopilotEmail(e.target.value)} placeholder="sam@example.com" />
-          </label>
-          <button type="submit">Generate invite link</button>
-        </form>
+        <h3>Invite a wingman</h3>
+        {circleFull ? (
+          <p className="muted">Your circle is full — remove someone below to invite a different wingman.</p>
+        ) : (
+          <form className="form form-inline" onSubmit={createInvite}>
+            <label>
+              Their name / relationship
+              <input
+                value={relationshipLabel}
+                onChange={(e) => setRelationshipLabel(e.target.value)}
+                placeholder="e.g. Best friend Sam"
+              />
+            </label>
+            <label>
+              Their email (optional)
+              <input type="email" value={copilotEmail} onChange={(e) => setCopilotEmail(e.target.value)} placeholder="sam@example.com" />
+            </label>
+            <button type="submit">Generate invite link</button>
+          </form>
+        )}
+        {inviteError && <p className="error">{inviteError}</p>}
         {latestInviteLink && (
           <p className="invite-link">
             Share this link: <code>{latestInviteLink}</code>
@@ -66,8 +85,8 @@ export default function Copilots() {
       </div>
 
       <div className="card">
-        <h3>Your co-pilots</h3>
-        {copilots.length === 0 && <p className="muted">No co-pilots yet. Invite a friend above.</p>}
+        <h3>Your wingmen</h3>
+        {copilots.length === 0 && <p className="muted">No wingmen yet. Invite a friend above.</p>}
         <ul className="list">
           {copilots.map((c) => (
             <li key={c.id}>
@@ -84,8 +103,13 @@ export default function Copilots() {
       </div>
 
       <div className="card">
-        <h3>Pilots you're co-piloting for</h3>
-        {pilotingFor.length === 0 && <p className="muted">You're not vouching for anyone yet.</p>}
+        <h3>Pilots whose wing circle you're in</h3>
+        {pilotingFor.length === 0 && <p className="muted">You're not a wingman for anyone yet.</p>}
+        {pilotingFor.length > 0 && (
+          <p className="muted">
+            <Link to="/wing-queue">Go to the wing queue</Link> to vote on their pending interests.
+          </p>
+        )}
         <ul className="list">
           {pilotingFor.map((p) => (
             <li key={p.id}>
