@@ -1,7 +1,9 @@
 import express from 'express';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { isPilotOfMatch, getAccessibleMatchRows, getAcceptedCopilotPilotIds, copilotSideForPilotIds } from './matches.js';
+import { TERMINAL_STATUSES, isPilotOfMatch, getAccessibleMatchRows } from './matches.js';
+import { getAcceptedCopilotPilotIds } from '../lib/circles.js';
+import { lastReadAt, unreadCount } from '../lib/chat.js';
 
 const router = express.Router();
 const EPOCH = '1970-01-01 00:00:00';
@@ -12,39 +14,28 @@ function getNotificationState(userId) {
   return { user_id: userId, matches_seen_at: EPOCH, copilots_seen_at: EPOCH };
 }
 
-function lastReadAt(userId, matchId, room) {
-  const row = db
-    .prepare('SELECT last_read_at FROM chat_reads WHERE user_id = ? AND match_id = ? AND room = ?')
-    .get(userId, matchId, room);
-  return row ? row.last_read_at : EPOCH;
+// Every interest whose wing chat I can read: my own outgoing interests, and
+// any interest belonging to a pilot I'm an accepted co-pilot for.
+function getRelevantInterests(userId, pilotIds) {
+  const placeholders = pilotIds.length ? pilotIds.map(() => '?').join(',') : null;
+  const clause = placeholders ? `from_user_id = ? OR from_user_id IN (${placeholders})` : 'from_user_id = ?';
+  return db.prepare(`SELECT id FROM interests WHERE ${clause}`).all(userId, ...pilotIds);
 }
 
 router.get('/summary', requireAuth, (req, res) => {
   const state = getNotificationState(req.userId);
   const matches = getAccessibleMatchRows(req.userId);
-  const pilotIds = getAcceptedCopilotPilotIds(req.userId);
+  const pilotIds = [...getAcceptedCopilotPilotIds(req.userId)];
 
   const newMatches = matches.filter((m) => m.created_at > state.matches_seen_at).length;
 
   let unreadMessages = 0;
+  for (const interest of getRelevantInterests(req.userId, pilotIds)) {
+    unreadMessages += unreadCount('copilot', interest.id, req.userId, lastReadAt(req.userId, 'copilot', interest.id));
+  }
   for (const match of matches) {
-    if (copilotSideForPilotIds(pilotIds, match)) {
-      const since = lastReadAt(req.userId, match.id, 'copilot');
-      const { count } = db
-        .prepare(
-          'SELECT COUNT(*) as count FROM copilot_messages WHERE match_id = ? AND sender_user_id != ? AND created_at > ?'
-        )
-        .get(match.id, req.userId, since);
-      unreadMessages += count;
-    }
-    if (isPilotOfMatch(req.userId, match) && match.status === 'approved') {
-      const since = lastReadAt(req.userId, match.id, 'pilot');
-      const { count } = db
-        .prepare(
-          'SELECT COUNT(*) as count FROM pilot_messages WHERE match_id = ? AND sender_user_id != ? AND created_at > ?'
-        )
-        .get(match.id, req.userId, since);
-      unreadMessages += count;
+    if (isPilotOfMatch(req.userId, match) && !TERMINAL_STATUSES.includes(match.status)) {
+      unreadMessages += unreadCount('pilot', match.id, req.userId, lastReadAt(req.userId, 'pilot', match.id));
     }
   }
 
@@ -54,7 +45,17 @@ router.get('/summary', requireAuth, (req, res) => {
     )
     .get(req.userId, state.copilots_seen_at);
 
-  res.json({ newMatches, unreadMessages, newCopilotAcceptances });
+  let pendingVotes = 0;
+  if (pilotIds.length > 0) {
+    const placeholders = pilotIds.map(() => '?').join(',');
+    const votedSubquery = `id NOT IN (SELECT interest_id FROM interest_votes WHERE copilot_user_id = ?)`;
+    const { count } = db
+      .prepare(`SELECT COUNT(*) as count FROM interests WHERE status = 'pending_wings' AND from_user_id IN (${placeholders}) AND ${votedSubquery}`)
+      .get(...pilotIds, req.userId);
+    pendingVotes = count;
+  }
+
+  res.json({ newMatches, unreadMessages, newCopilotAcceptances, pendingVotes });
 });
 
 function markSeen(userId, column) {

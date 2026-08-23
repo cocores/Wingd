@@ -2,8 +2,10 @@ import express from 'express';
 import { randomBytes } from 'crypto';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { acceptedCircleSize } from '../lib/circles.js';
 
 const router = express.Router();
+const MAX_CIRCLE_SIZE = 5;
 
 function generateInviteCode() {
   return randomBytes(6).toString('hex');
@@ -11,6 +13,9 @@ function generateInviteCode() {
 
 // Create an invite link for a friend to become a co-pilot for the current (pilot) user.
 router.post('/invites', requireAuth, (req, res) => {
+  if (acceptedCircleSize(req.userId) >= MAX_CIRCLE_SIZE) {
+    return res.status(409).json({ error: 'This wing circle is already full (5 co-pilots max)' });
+  }
   const { relationshipLabel, copilotEmail } = req.body;
   const inviteCode = generateInviteCode();
   db.prepare(
@@ -44,6 +49,9 @@ router.post('/invites/:code/accept', requireAuth, (req, res) => {
   if (invite.status === 'accepted') {
     return res.status(409).json({ error: 'This invite has already been used' });
   }
+  if (acceptedCircleSize(invite.pilot_user_id) >= MAX_CIRCLE_SIZE) {
+    return res.status(409).json({ error: 'This wing circle is already full (5 co-pilots max)' });
+  }
 
   db.prepare(`UPDATE copilot_links SET copilot_user_id = ?, status = 'accepted' WHERE id = ?`).run(req.userId, invite.id);
   const updated = db.prepare('SELECT * FROM copilot_links WHERE id = ?').get(invite.id);
@@ -60,7 +68,7 @@ router.get('/mine', requireAuth, (req, res) => {
        WHERE cl.pilot_user_id = ? ORDER BY cl.created_at DESC`
     )
     .all(req.userId);
-  res.json({ copilots: rows });
+  res.json({ copilots: rows, maxCircleSize: MAX_CIRCLE_SIZE, acceptedCount: acceptedCircleSize(req.userId) });
 });
 
 // Pilots I am co-piloting for.
@@ -83,4 +91,5 @@ router.delete('/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+export { acceptedCircleSize, MAX_CIRCLE_SIZE };
 export default router;

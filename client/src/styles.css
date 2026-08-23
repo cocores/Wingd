@@ -454,21 +454,58 @@ textarea {
   margin-left: 8px;
 }
 
-.badge.copilot_review {
+.badge.pending_wings {
   background: var(--gold);
   color: #402900;
 }
 
 .badge.approved,
-.badge.accepted {
+.badge.accepted,
+.badge.sent,
+.badge.matched {
   background: var(--success);
   color: #05341f;
 }
 
 .badge.rejected,
-.badge.unmatched {
+.badge.unmatched,
+.badge.declined_by_wings {
   background: var(--danger);
   color: #380014;
+}
+
+.approved {
+  color: var(--success);
+}
+
+.rejected {
+  color: var(--danger);
+}
+
+.wing-queue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wing-queue-target {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.wing-queue-photo {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.vouch-tally {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .link-btn {

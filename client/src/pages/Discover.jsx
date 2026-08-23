@@ -8,7 +8,7 @@ export default function Discover() {
   const { refresh: refreshNotifications } = useNotifications();
   const [profiles, setProfiles] = useState([]);
   const [index, setIndex] = useState(0);
-  const [matchNotice, setMatchNotice] = useState(null);
+  const [interestNotice, setInterestNotice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ minAge: '', maxAge: '', gender: '' });
@@ -48,8 +48,8 @@ export default function Discover() {
     const target = profiles[index];
     if (!target) return;
     const { data } = await api.post('/swipes', { targetUserId: target.userId, direction });
-    if (data.match) {
-      setMatchNotice(data.match);
+    if (data.interest) {
+      setInterestNotice({ name: target.name, status: data.interest.status });
       refreshNotifications();
     }
     setIndex((i) => i + 1);
@@ -89,13 +89,22 @@ export default function Discover() {
         </form>
       )}
 
-      {matchNotice && (
+      {interestNotice && (
         <div className="match-banner">
           <p>
-            🎉 It's a match! You liked each other. Your co-pilots can now vet it in{' '}
-            <Link to="/matches">Matches</Link>.
+            {interestNotice.status === 'sent' ? (
+              <>
+                ✈️ Interest in {interestNotice.name} sent! If they're interested back (and their wings approve too), you'll match. Track it in{' '}
+                <Link to="/matches">Matches</Link>.
+              </>
+            ) : (
+              <>
+                🛩️ Your interest in {interestNotice.name} is queued for your wing circle to review. Check{' '}
+                <Link to="/wing-queue">Wing queue</Link> or <Link to="/matches">Matches</Link> for updates.
+              </>
+            )}
           </p>
-          <button onClick={() => setMatchNotice(null)}>Dismiss</button>
+          <button onClick={() => setInterestNotice(null)}>Dismiss</button>
         </div>
       )}
 

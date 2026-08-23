@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useMatchChat } from '../hooks/useMatchChat.js';
+import { usePilotChat } from '../hooks/useChat.js';
 
 export default function PilotChat() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { match, messages, error, bottomRef, send, refetchMatch } = useMatchChat(id, 'pilot');
+  const { match, messages, error, bottomRef, send, refetchMatch } = usePilotChat(id);
   const [body, setBody] = useState('');
 
   function handleSend(e) {
