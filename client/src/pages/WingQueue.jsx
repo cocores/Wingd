@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
-import { resolveAssetUrl } from '../config.js';
+import Avatar from '../components/Avatar.jsx';
 
 export default function WingQueue() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -49,9 +49,7 @@ export default function WingQueue() {
           {interests.map((interest) => (
             <li key={interest.id} className="card wing-queue-row">
               <div className="wing-queue-target">
-                {interest.toUser.photoUrl && (
-                  <img src={resolveAssetUrl(interest.toUser.photoUrl)} alt={interest.toUser.name} className="wing-queue-photo" />
-                )}
+                <Avatar name={interest.toUser.name} photoUrl={interest.toUser.photoUrl} className="wing-queue-photo" />
                 <div>
                   <strong>
                     {interest.fromUser.name} is interested in {interest.toUser.name}

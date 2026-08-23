@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
-import { resolveAssetUrl } from '../config.js';
+import Avatar from '../components/Avatar.jsx';
 
 export default function Admirers() {
   const [admirers, setAdmirers] = useState(null);
@@ -50,7 +50,7 @@ export default function Admirers() {
           {admirers.map((a) => (
             <li key={a.interestId} className="card match-row">
               <div className="wing-queue-target">
-                {a.photoUrl && <img src={resolveAssetUrl(a.photoUrl)} alt={a.name} className="wing-queue-photo" />}
+                <Avatar name={a.name} photoUrl={a.photoUrl} className="wing-queue-photo" />
                 <div>
                   <strong>
                     {a.name}

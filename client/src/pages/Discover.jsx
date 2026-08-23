@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
-import { resolveAssetUrl } from '../config.js';
+import { GENDER_OPTIONS } from '../constants.js';
+import Avatar from '../components/Avatar.jsx';
 
 export default function Discover() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -123,7 +124,14 @@ export default function Discover() {
           </label>
           <label>
             Gender
-            <input value={filters.gender} onChange={(e) => updateFilter('gender', e.target.value)} placeholder="e.g. woman" />
+            <select value={filters.gender} onChange={(e) => updateFilter('gender', e.target.value)}>
+              <option value="">Anyone</option>
+              {GENDER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </label>
           <button type="submit">Apply</button>
           <button type="button" className="link-btn" onClick={clearFilters}>
@@ -165,7 +173,7 @@ export default function Discover() {
         </div>
       ) : (
         <div className="swipe-card">
-          {current.photoUrl && <img src={resolveAssetUrl(current.photoUrl)} alt={current.name} className="swipe-photo" />}
+          <Avatar name={current.name} photoUrl={current.photoUrl} className="swipe-photo" />
           <h2>
             {current.name}
             {current.age ? `, ${current.age}` : ''}

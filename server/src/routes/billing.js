@@ -6,6 +6,22 @@ import { stripe, billingConfigured, webhookConfigured, STRIPE_WEBHOOK_SECRET, ST
 const router = express.Router();
 const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
+// The price rarely changes, so this is cached for a few minutes instead of
+// hitting Stripe on every /status request.
+let cachedPrice = null;
+let cachedPriceAt = 0;
+const PRICE_CACHE_MS = 5 * 60 * 1000;
+
+async function getPremiumPrice() {
+  if (!billingConfigured()) return null;
+  if (cachedPrice && Date.now() - cachedPriceAt < PRICE_CACHE_MS) return cachedPrice;
+
+  const price = await stripe.prices.retrieve(STRIPE_PREMIUM_PRICE_ID);
+  cachedPrice = { amount: price.unit_amount, currency: price.currency, interval: price.recurring?.interval || null };
+  cachedPriceAt = Date.now();
+  return cachedPrice;
+}
+
 async function getOrCreateStripeCustomer(userId) {
   const userRef = db.collection('users').doc(userId);
   const user = (await userRef.get()).data();
@@ -18,10 +34,12 @@ async function getOrCreateStripeCustomer(userId) {
 
 router.get('/status', requireAuth, async (req, res) => {
   const user = (await db.collection('users').doc(req.userId).get()).data();
+  const price = await getPremiumPrice();
   res.json({
     configured: billingConfigured(),
     premiumStatus: user.premiumStatus || 'none',
     premiumCurrentPeriodEnd: user.premiumCurrentPeriodEnd || null,
+    price,
   });
 });
 

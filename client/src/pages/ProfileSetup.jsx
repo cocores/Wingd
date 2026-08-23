@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationInput from '../components/LocationInput.jsx';
-import { resolveAssetUrl } from '../config.js';
+import { GENDER_OPTIONS, INTERESTED_IN_OPTIONS } from '../constants.js';
+import Avatar from '../components/Avatar.jsx';
 
 export default function ProfileSetup() {
-  const { setHasProfile } = useAuth();
+  const { user, setHasProfile } = useAuth();
   const [form, setForm] = useState({
     age: '',
     gender: '',
@@ -82,7 +83,7 @@ export default function ProfileSetup() {
       <form className="card form" onSubmit={handleSubmit}>
         <label>
           Photo
-          {form.photoUrl && <img src={resolveAssetUrl(form.photoUrl)} alt="Profile" className="profile-photo-preview" />}
+          <Avatar name={user?.name} photoUrl={form.photoUrl} className="profile-photo-preview" />
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} disabled={uploadingPhoto} />
           {uploadingPhoto && <span className="muted">Uploading…</span>}
           {photoError && <span className="error">{photoError}</span>}
@@ -93,15 +94,29 @@ export default function ProfileSetup() {
         </label>
         <label>
           Gender
-          <input value={form.gender} onChange={(e) => update('gender', e.target.value)} placeholder="e.g. woman, man, non-binary" />
+          <select value={form.gender} onChange={(e) => update('gender', e.target.value)}>
+            <option value="">Select…</option>
+            {GENDER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            {form.gender && !GENDER_OPTIONS.some((o) => o.value === form.gender) && <option value={form.gender}>{form.gender}</option>}
+          </select>
         </label>
         <label>
           Interested in
-          <input
-            value={form.interestedIn}
-            onChange={(e) => update('interestedIn', e.target.value)}
-            placeholder="e.g. men, women, everyone"
-          />
+          <select value={form.interestedIn} onChange={(e) => update('interestedIn', e.target.value)}>
+            <option value="">Select…</option>
+            {INTERESTED_IN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            {form.interestedIn && !INTERESTED_IN_OPTIONS.some((o) => o.value === form.interestedIn) && (
+              <option value={form.interestedIn}>{form.interestedIn}</option>
+            )}
+          </select>
         </label>
         <label>
           Location

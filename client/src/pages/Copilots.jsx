@@ -90,13 +90,15 @@ export default function Copilots() {
         <ul className="list">
           {copilots.map((c) => (
             <li key={c.id}>
-              <span>
+              <span className="list-title">
                 {c.copilotName || c.copilotEmail || 'Pending invite'} {c.relationshipLabel ? `— ${c.relationshipLabel}` : ''}
               </span>
-              <span className={`badge ${c.status}`}>{c.status}</span>
-              <button className="link-btn" onClick={() => removeLink(c.id)}>
-                Remove
-              </button>
+              <span className="list-actions">
+                <span className={`badge ${c.status}`}>{c.status}</span>
+                <button className="link-btn" onClick={() => removeLink(c.id)}>
+                  Remove
+                </button>
+              </span>
             </li>
           ))}
         </ul>

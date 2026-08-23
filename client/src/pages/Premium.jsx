@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 
+function formatPrice(price) {
+  if (!price) return null;
+  const amount = (price.amount / 100).toLocaleString(undefined, { style: 'currency', currency: price.currency.toUpperCase() });
+  return `${amount}/${price.interval}`;
+}
+
 const STATUS_LABELS = {
   none: 'Free',
   active: 'Premium — active',
@@ -77,6 +83,7 @@ export default function Premium() {
             )}
             {!status.configured && <p className="muted">Billing isn't configured on this server yet.</p>}
             {error && <p className="error">{error}</p>}
+            {!isPremium && status.price && <p className="premium-price">{formatPrice(status.price)}</p>}
             {isPremium ? (
               <button onClick={manage} disabled={busy}>
                 Manage subscription
@@ -90,11 +97,19 @@ export default function Premium() {
 
           <div className="card">
             <h3>What premium unlocks</h3>
-            <ul className="list">
-              <li>Bigger wing circle — up to 15 wingmen instead of 5</li>
-              <li>Unlimited daily likes — no more waiting for tomorrow</li>
-              <li>See who's interested in you before you browse back</li>
-              <li>Undo your last swipe</li>
+            <ul className="list premium-features">
+              <li>
+                <span className="emoji">🧑‍✈️</span> Bigger wing circle — up to 15 wingmen instead of 5
+              </li>
+              <li>
+                <span className="emoji">♥</span> Unlimited daily likes — no more waiting for tomorrow
+              </li>
+              <li>
+                <span className="emoji">👀</span> See who's interested in you before you browse back
+              </li>
+              <li>
+                <span className="emoji">↩</span> Undo your last swipe
+              </li>
             </ul>
           </div>
         </>
