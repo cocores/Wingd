@@ -633,14 +633,18 @@ textarea:focus {
 .badge.approved,
 .badge.accepted,
 .badge.sent,
-.badge.matched {
+.badge.matched,
+.badge.active {
   background: var(--success);
   color: #05341f;
 }
 
 .badge.rejected,
 .badge.unmatched,
-.badge.declined_by_wings {
+.badge.declined_by_wings,
+.badge.past_due,
+.badge.unpaid,
+.badge.canceled {
   background: var(--danger);
   color: #380014;
 }

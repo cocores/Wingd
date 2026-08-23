@@ -3,9 +3,9 @@ import { randomBytes } from 'crypto';
 import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { acceptedCircleSize } from '../lib/circles.js';
+import { getCircleCap } from '../lib/premium.js';
 
 const router = express.Router();
-const MAX_CIRCLE_SIZE = 5;
 
 function generateInviteCode() {
   return randomBytes(6).toString('hex');
@@ -22,8 +22,9 @@ async function getUserName(userId) {
 }
 
 router.post('/invites', requireAuth, async (req, res) => {
-  if ((await acceptedCircleSize(req.userId)) >= MAX_CIRCLE_SIZE) {
-    return res.status(409).json({ error: 'This wing circle is already full (5 co-pilots max)' });
+  const cap = await getCircleCap(req.userId);
+  if ((await acceptedCircleSize(req.userId)) >= cap) {
+    return res.status(409).json({ error: `This wing circle is already full (${cap} co-pilots max)` });
   }
   const { relationshipLabel, copilotEmail } = req.body;
   const inviteCode = generateInviteCode();
@@ -58,8 +59,9 @@ router.post('/invites/:code/accept', requireAuth, async (req, res) => {
   if (link.status === 'accepted') {
     return res.status(409).json({ error: 'This invite has already been used' });
   }
-  if ((await acceptedCircleSize(link.pilotUserId)) >= MAX_CIRCLE_SIZE) {
-    return res.status(409).json({ error: 'This wing circle is already full (5 co-pilots max)' });
+  const cap = await getCircleCap(link.pilotUserId);
+  if ((await acceptedCircleSize(link.pilotUserId)) >= cap) {
+    return res.status(409).json({ error: `This wing circle is already full (${cap} co-pilots max)` });
   }
 
   await db.collection('copilotLinks').doc(link.id).update({ copilotUserId: req.userId, status: 'accepted' });
@@ -88,7 +90,7 @@ router.get('/mine', requireAuth, async (req, res) => {
     copilotUserId: l.copilotUserId,
   }));
 
-  res.json({ copilots, maxCircleSize: MAX_CIRCLE_SIZE, acceptedCount: await acceptedCircleSize(req.userId) });
+  res.json({ copilots, maxCircleSize: await getCircleCap(req.userId), acceptedCount: await acceptedCircleSize(req.userId) });
 });
 
 // Pilots I am co-piloting for.
@@ -116,5 +118,5 @@ router.delete('/:id', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-export { acceptedCircleSize, MAX_CIRCLE_SIZE };
+export { acceptedCircleSize };
 export default router;

@@ -36,6 +36,8 @@ export default function NavBar() {
           Wing circle
           <Badge count={summary.newCopilotAcceptances} />
         </NavLink>
+        <NavLink to="/admirers">Admirers</NavLink>
+        <NavLink to="/premium">Premium ✨</NavLink>
         <NavLink to="/profile">Profile</NavLink>
       </div>
       <div className="navbar-user">

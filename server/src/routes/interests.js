@@ -3,6 +3,7 @@ import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { acceptedCircleSize, getAcceptedCopilotPilotIds, isAcceptedCopilotFor } from '../lib/circles.js';
 import { getMessages, markChatRead } from '../lib/chat.js';
+import { isPremium, getDailyLikeCap, getTodayLikeCount, tryConsumeDailyLike } from '../lib/premium.js';
 
 const router = express.Router();
 
@@ -125,6 +126,15 @@ router.post('/swipes', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'You cannot swipe on yourself' });
   }
 
+  // Only a brand-new like against this target consumes the daily cap —
+  // re-liking someone you're already interested in is a no-op below anyway.
+  if (direction === 'like') {
+    const alreadyInterested = (await db.collection('interests').doc(interestDocId(req.userId, targetUserId)).get()).exists;
+    if (!alreadyInterested && !(await tryConsumeDailyLike(req.userId))) {
+      return res.status(429).json({ error: "You've hit today's like limit. Upgrade to premium for unlimited likes." });
+    }
+  }
+
   await db
     .collection('swipes')
     .doc(`${req.userId}__${targetUserId}`)
@@ -136,6 +146,83 @@ router.post('/swipes', requireAuth, async (req, res) => {
   }
 
   res.json({ ok: true, interest });
+});
+
+// Undo the most recent swipe (premium only), as long as a 'like' hasn't
+// progressed past waiting on the sender's own wings.
+router.post('/swipes/undo', requireAuth, async (req, res) => {
+  if (!(await isPremium(req.userId))) {
+    return res.status(402).json({ error: 'Upgrade to premium to undo a swipe' });
+  }
+
+  const snap = await db.collection('swipes').where('swiperUserId', '==', req.userId).get();
+  const swipes = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const last = swipes[0];
+  if (!last) return res.status(400).json({ error: 'No swipes to undo' });
+
+  if (last.direction === 'like') {
+    const interestRef = db.collection('interests').doc(interestDocId(req.userId, last.targetUserId));
+    const interestDoc = await interestRef.get();
+    if (interestDoc.exists) {
+      if (interestDoc.data().status !== 'pending_wings') {
+        return res.status(400).json({ error: 'This interest has already moved on and can\'t be undone' });
+      }
+      const votesSnap = await db.collection('interestVotes').where('interestId', '==', interestRef.id).get();
+      if (!votesSnap.empty) {
+        return res.status(400).json({ error: 'Your wings have already started voting on this — can\'t undo' });
+      }
+      await interestRef.delete();
+    }
+  }
+
+  await db.collection('swipes').doc(last.id).delete();
+  res.json({ ok: true, undone: { targetUserId: last.targetUserId, direction: last.direction } });
+});
+
+router.get('/interests/like-status', requireAuth, async (req, res) => {
+  const [cap, used, premium] = await Promise.all([getDailyLikeCap(req.userId), getTodayLikeCount(req.userId), isPremium(req.userId)]);
+  res.json({ dailyCap: cap === Infinity ? null : cap, usedToday: used, isPremium: premium });
+});
+
+// Incoming interests that have already cleared the sender's wings — a
+// premium-only look at who's interested before browsing back yourself.
+// Excludes anyone already matched (that belongs on the Matches page).
+router.get('/interests/admirers', requireAuth, async (req, res) => {
+  if (!(await isPremium(req.userId))) {
+    return res.status(402).json({ error: 'Upgrade to premium to see who liked you first' });
+  }
+
+  const snap = await db.collection('interests').where('toUserId', '==', req.userId).get();
+  const sent = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((i) => i.status === 'sent');
+
+  const unmatched = [];
+  for (const interest of sent) {
+    const { docId } = canonicalMatch(interest.fromUserId, interest.toUserId);
+    const matchDoc = await db.collection('matches').doc(docId).get();
+    if (!matchDoc.exists) unmatched.push(interest);
+  }
+  unmatched.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const admirers = await Promise.all(
+    unmatched.map(async (i) => {
+      const [userDoc, profileDoc] = await Promise.all([
+        db.collection('users').doc(i.fromUserId).get(),
+        db.collection('pilotProfiles').doc(i.fromUserId).get(),
+      ]);
+      const profile = profileDoc.data() || {};
+      return {
+        interestId: i.id,
+        userId: i.fromUserId,
+        name: userDoc.data()?.name,
+        age: profile.age ?? null,
+        photoUrl: profile.photoUrl ?? null,
+        bio: profile.bio ?? null,
+        sentAt: i.createdAt,
+      };
+    })
+  );
+
+  res.json({ admirers });
 });
 
 // Interests I've sent, awaiting my wings, sent onward, or declined.

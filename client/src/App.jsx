@@ -11,6 +11,8 @@ import Matches from './pages/Matches.jsx';
 import WingQueue from './pages/WingQueue.jsx';
 import WingChat from './pages/WingChat.jsx';
 import PilotChat from './pages/PilotChat.jsx';
+import Premium from './pages/Premium.jsx';
+import Admirers from './pages/Admirers.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
 export default function App() {
@@ -78,6 +80,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PilotChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/premium"
+          element={
+            <ProtectedRoute>
+              <Premium />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admirers"
+          element={
+            <ProtectedRoute>
+              <Admirers />
             </ProtectedRoute>
           }
         />

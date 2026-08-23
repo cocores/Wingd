@@ -33,6 +33,20 @@ messages, pending votes in your wing queue, and new wing-circle acceptances
 all show up as counts next to **Matches**, **Wing queue**, and **Wing
 circle**.
 
+## Premium
+
+A monthly Stripe subscription (`server/src/routes/billing.js`) unlocks:
+
+- A bigger wing circle (15 wingmen instead of 5)
+- Unlimited daily likes (free accounts get 10/day)
+- **Admirers** — see who's already interested in you before you browse back
+- Undoing your last swipe (only while it hasn't progressed past waiting on
+  your own wing circle's vote)
+
+See `server/.env.example` for the Stripe setup (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PREMIUM_PRICE_ID`) — without these, checkout
+and the billing portal return a 501 and the free limits always apply.
+
 ## Stack
 
 - **Backend**: Node.js, Express, Firestore (via `firebase-admin`), Socket.io

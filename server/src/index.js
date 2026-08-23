@@ -12,6 +12,7 @@ import matchRoutes from './routes/matches.js';
 import interestRoutes from './routes/interests.js';
 import notificationRoutes from './routes/notifications.js';
 import geoRoutes from './routes/geo.js';
+import billingRoutes, { handleWebhook } from './routes/billing.js';
 import { attachSocket } from './socket.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,11 @@ const app = express();
 const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
 app.use(cors({ origin: clientOrigin, credentials: true }));
+
+// Stripe's webhook signature check needs the raw body, so this must be
+// registered before express.json() parses (and discards) it.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
@@ -29,6 +35,7 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/copilots', copilotRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/geo', geoRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api', matchRoutes);
 app.use('/api', interestRoutes);
 
