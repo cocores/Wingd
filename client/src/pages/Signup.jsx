@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import SocialLogin from '../components/SocialLogin.jsx';
+import PasswordField from '../components/PasswordField.jsx';
 import AuthHero from '../components/AuthHero.jsx';
 
 export default function Signup() {
@@ -37,32 +38,50 @@ export default function Signup() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-panel">
         <AuthHero />
         <h1>Wingd</h1>
-        <p className="subtitle">Every pilot needs a wing-team.</p>
-        <SocialLogin onSuccess={handleSocialSuccess} onError={setError} />
-        <form className="form" onSubmit={handleSubmit}>
-          <label>
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label>
-            Email
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </label>
-          <label>
-            Password
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
-          </label>
-          {error && <p className="error">{error}</p>}
-          <button type="submit" className="primary" disabled={submitting}>
-            {submitting ? 'Creating account…' : 'Sign up'}
-          </button>
-        </form>
-        <p>
-          Already have an account? <Link to="/login">Log in</Link>
-        </p>
+        <p className="subtitle">Every pilot needs a wing circle.</p>
+        <ul className="auth-highlights">
+          <li>
+            <span className="emoji">🧑‍✈️</span> Bring 2–5 friends as your wingmen
+          </li>
+          <li>
+            <span className="emoji">🗳️</span> They vote before your interest is sent
+          </li>
+          <li>
+            <span className="emoji">💬</span> Matches arrive with context, not cold
+          </li>
+        </ul>
+      </div>
+      <div className="auth-card-wrap">
+        <div className="auth-card">
+          <div className="auth-tabs">
+            <Link to="/login">Log in</Link>
+            <Link to="/signup" className="active">
+              Sign up
+            </Link>
+          </div>
+          <SocialLogin onSuccess={handleSocialSuccess} onError={setError} />
+          <form className="form" onSubmit={handleSubmit}>
+            <label>
+              Name
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label>
+              Email
+              <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </label>
+            <label>
+              Password
+              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" />
+            </label>
+            {error && <p className="error">{error}</p>}
+            <button type="submit" className="primary" disabled={submitting}>
+              {submitting ? 'Creating account…' : 'Sign up'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
