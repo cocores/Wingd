@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// All reads/writes go through the Express API using firebase-admin, which
+// bypasses these rules entirely. No browser code talks to Firestore
+// directly, so this denies everything as a safety net in case that ever
+// changes without someone deliberately opening these rules up first.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

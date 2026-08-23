@@ -20,29 +20,29 @@ export function attachSocket(httpServer, clientOrigin) {
   });
 
   io.on('connection', (socket) => {
-    socket.on('join-copilot-room', ({ interestId }, ack) => {
-      const interest = getInterestById(interestId);
-      if (!interest || !hasInterestAccess(socket.userId, interest)) {
+    socket.on('join-copilot-room', async ({ interestId }, ack) => {
+      const interest = await getInterestById(interestId);
+      if (!interest || !(await hasInterestAccess(socket.userId, interest))) {
         return ack?.({ error: 'Not authorized for this wing chat' });
       }
       socket.join(`copilot-${interestId}`);
       ack?.({ ok: true });
     });
 
-    socket.on('copilot-message', ({ interestId, body }, ack) => {
-      const interest = getInterestById(interestId);
-      if (!interest || !hasInterestAccess(socket.userId, interest)) {
+    socket.on('copilot-message', async ({ interestId, body }, ack) => {
+      const interest = await getInterestById(interestId);
+      if (!interest || !(await hasInterestAccess(socket.userId, interest))) {
         return ack?.({ error: 'Not authorized for this wing chat' });
       }
       if (!body || !body.trim()) return ack?.({ error: 'Message body required' });
 
-      const row = insertMessage('copilot', interestId, socket.userId, body.trim());
+      const row = await insertMessage('copilot', interestId, socket.userId, body.trim());
       io.to(`copilot-${interestId}`).emit('copilot-message', row);
       ack?.({ ok: true, message: row });
     });
 
-    socket.on('join-pilot-room', ({ matchId }, ack) => {
-      const match = getMatchById(matchId);
+    socket.on('join-pilot-room', async ({ matchId }, ack) => {
+      const match = await getMatchById(matchId);
       if (!match || !isPilotOfMatch(socket.userId, match) || TERMINAL_STATUSES.includes(match.status)) {
         return ack?.({ error: 'Not authorized for this chat yet' });
       }
@@ -50,14 +50,14 @@ export function attachSocket(httpServer, clientOrigin) {
       ack?.({ ok: true });
     });
 
-    socket.on('pilot-message', ({ matchId, body }, ack) => {
-      const match = getMatchById(matchId);
+    socket.on('pilot-message', async ({ matchId, body }, ack) => {
+      const match = await getMatchById(matchId);
       if (!match || !isPilotOfMatch(socket.userId, match) || TERMINAL_STATUSES.includes(match.status)) {
         return ack?.({ error: 'Not authorized for this chat yet' });
       }
       if (!body || !body.trim()) return ack?.({ error: 'Message body required' });
 
-      const row = insertMessage('pilot', matchId, socket.userId, body.trim());
+      const row = await insertMessage('pilot', matchId, socket.userId, body.trim());
       io.to(`pilot-${matchId}`).emit('pilot-message', row);
       ack?.({ ok: true, message: row });
     });

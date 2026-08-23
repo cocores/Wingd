@@ -1,5 +1,5 @@
 import express from 'express';
-import db from '../db.js';
+import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAcceptedCopilotPilotIds, copilotSideForPilotIds } from '../lib/circles.js';
 import { getMessages, insertMessage, markChatRead } from '../lib/chat.js';
@@ -8,74 +8,57 @@ const router = express.Router();
 
 const TERMINAL_STATUSES = ['unmatched'];
 
-function getMatchById(id) {
-  return db.prepare('SELECT * FROM matches WHERE id = ?').get(id);
-}
-
-function getMatchOr404(req, res) {
-  const match = getMatchById(req.params.id);
-  if (!match) {
-    res.status(404).json({ error: 'Match not found' });
-    return null;
-  }
-  return match;
+async function getMatchById(id) {
+  const doc = await db.collection('matches').doc(id).get();
+  return doc.exists ? { id: doc.id, ...doc.data() } : null;
 }
 
 function isPilotOfMatch(userId, match) {
-  return userId === match.pilot_a_id || userId === match.pilot_b_id;
+  return userId === match.pilotAId || userId === match.pilotBId;
 }
 
-// Single-match convenience wrapper (one query) for route handlers that only ever
-// need the answer for one match, e.g. socket handlers and single-match routes.
-function getCopilotSide(copilotUserId, match) {
-  const rows = db
-    .prepare(
-      `SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND pilot_user_id IN (?, ?) AND status = 'accepted'`
-    )
-    .all(copilotUserId, match.pilot_a_id, match.pilot_b_id);
-  return copilotSideForPilotIds(new Set(rows.map((r) => r.pilot_user_id)), match);
+async function getCopilotSide(copilotUserId, match) {
+  const pilotIds = await getAcceptedCopilotPilotIds(copilotUserId);
+  return copilotSideForPilotIds(pilotIds, match);
 }
 
-function getUsersByIds(ids) {
-  if (ids.length === 0) return new Map();
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = db.prepare(`SELECT id, name FROM users WHERE id IN (${placeholders})`).all(...ids);
-  return new Map(rows.map((u) => [u.id, u]));
+async function getUserMap(ids) {
+  const uniqueIds = [...new Set(ids)];
+  const docs = await Promise.all(uniqueIds.map((id) => db.collection('users').doc(id).get()));
+  return new Map(docs.map((d) => [d.id, { id: d.id, name: d.data()?.name }]));
 }
 
 // The vouch context for one side of a match: how many wings approved and any
 // notes they left, read from the interest that led to this match.
-function vouchContext(interestId) {
+async function vouchContext(interestId) {
   if (!interestId) return { circleSize: 0, approveCount: 0, notes: [] };
-  const votes = db
-    .prepare(
-      `SELECT iv.vote, iv.note, u.name as copilotName
-       FROM interest_votes iv JOIN users u ON u.id = iv.copilot_user_id
-       WHERE iv.interest_id = ? ORDER BY iv.created_at ASC`
-    )
-    .all(interestId);
+  const snap = await db.collection('interestVotes').where('interestId', '==', interestId).get();
+  const votes = snap.docs.map((d) => d.data());
+  const copilotIds = [...new Set(votes.map((v) => v.copilotUserId))];
+  const users = await Promise.all(copilotIds.map((id) => db.collection('users').doc(id).get()));
+  const nameById = new Map(users.map((u) => [u.id, u.data()?.name]));
   return {
     circleSize: votes.length,
     approveCount: votes.filter((v) => v.vote === 'approve').length,
-    notes: votes.filter((v) => v.note).map((v) => ({ copilotName: v.copilotName, note: v.note })),
+    notes: votes.filter((v) => v.note).map((v) => ({ copilotName: nameById.get(v.copilotUserId), note: v.note })),
   };
 }
 
-function serializeMatch(match, userId, { mySide, userMap } = {}) {
-  const pilotA = userMap ? userMap.get(match.pilot_a_id) : db.prepare('SELECT id, name FROM users WHERE id = ?').get(match.pilot_a_id);
-  const pilotB = userMap ? userMap.get(match.pilot_b_id) : db.prepare('SELECT id, name FROM users WHERE id = ?').get(match.pilot_b_id);
-  const resolvedSide = mySide !== undefined ? mySide : getCopilotSide(userId, match);
+async function serializeMatch(match, userId, { mySide, userMap } = {}) {
+  const map = userMap || (await getUserMap([match.pilotAId, match.pilotBId]));
+  const resolvedSide = mySide !== undefined ? mySide : await getCopilotSide(userId, match);
   const isActive = !TERMINAL_STATUSES.includes(match.status);
-  const myInterestId = resolvedSide === 'a' ? match.a_interest_id : resolvedSide === 'b' ? match.b_interest_id : null;
+  const myInterestId = resolvedSide === 'a' ? match.aInterestId : resolvedSide === 'b' ? match.bInterestId : null;
+  const [aVouch, bVouch] = await Promise.all([vouchContext(match.aInterestId), vouchContext(match.bInterestId)]);
 
   return {
     id: match.id,
     status: match.status,
-    pilotA,
-    pilotB,
-    aVouch: vouchContext(match.a_interest_id),
-    bVouch: vouchContext(match.b_interest_id),
-    createdAt: match.created_at,
+    pilotA: map.get(match.pilotAId),
+    pilotB: map.get(match.pilotBId),
+    aVouch,
+    bVouch,
+    createdAt: match.createdAt,
     isPilot: isPilotOfMatch(userId, match),
     mySide: resolvedSide,
     myInterestId,
@@ -84,78 +67,75 @@ function serializeMatch(match, userId, { mySide, userMap } = {}) {
   };
 }
 
-function assertActive(match, res) {
-  if (TERMINAL_STATUSES.includes(match.status)) {
-    res.status(400).json({ error: 'This match has already ended' });
-    return false;
-  }
-  return true;
+// Matches where the user is one of the two pilots, or an accepted co-pilot
+// for one of them. Firestore's 'in' operator (max 30 values) lets this run
+// as two queries instead of scanning every match.
+async function getAccessibleMatchRows(userId) {
+  const pilotIds = [...(await getAcceptedCopilotPilotIds(userId))];
+  const allIds = [...new Set([userId, ...pilotIds])];
+  const [asA, asB] = await Promise.all([
+    db.collection('matches').where('pilotAId', 'in', allIds).get(),
+    db.collection('matches').where('pilotBId', 'in', allIds).get(),
+  ]);
+  const byId = new Map();
+  for (const d of [...asA.docs, ...asB.docs]) byId.set(d.id, { id: d.id, ...d.data() });
+  return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-// Raw match rows where the user is one of the two pilots, or co-pilots for one of them.
-function getAccessibleMatchRows(userId) {
-  return db
-    .prepare(
-      `SELECT DISTINCT m.* FROM matches m
-       WHERE m.pilot_a_id = ? OR m.pilot_b_id = ?
-          OR m.pilot_a_id IN (SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted')
-          OR m.pilot_b_id IN (SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted')
-       ORDER BY m.created_at DESC`
-    )
-    .all(userId, userId, userId, userId);
-}
-
-router.get('/matches', requireAuth, (req, res) => {
-  const rows = getAccessibleMatchRows(req.userId);
-  const pilotIds = getAcceptedCopilotPilotIds(req.userId);
-  const userMap = getUsersByIds([...new Set(rows.flatMap((m) => [m.pilot_a_id, m.pilot_b_id]))]);
+router.get('/matches', requireAuth, async (req, res) => {
+  const rows = await getAccessibleMatchRows(req.userId);
+  const pilotIds = await getAcceptedCopilotPilotIds(req.userId);
+  const userMap = await getUserMap(rows.flatMap((m) => [m.pilotAId, m.pilotBId]));
 
   res.json({
-    matches: rows.map((m) => serializeMatch(m, req.userId, { mySide: copilotSideForPilotIds(pilotIds, m), userMap })),
+    matches: await Promise.all(rows.map((m) => serializeMatch(m, req.userId, { mySide: copilotSideForPilotIds(pilotIds, m), userMap }))),
   });
 });
 
-router.get('/matches/:id', requireAuth, (req, res) => {
-  const match = getMatchOr404(req, res);
-  if (!match) return;
-  const mySide = getCopilotSide(req.userId, match);
+router.get('/matches/:id', requireAuth, async (req, res) => {
+  const match = await getMatchById(req.params.id);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
+  const mySide = await getCopilotSide(req.userId, match);
   if (!isPilotOfMatch(req.userId, match) && !mySide) {
     return res.status(403).json({ error: 'You do not have access to this match' });
   }
-  res.json({ match: serializeMatch(match, req.userId, { mySide }) });
+  res.json({ match: await serializeMatch(match, req.userId, { mySide }) });
 });
 
 // Either pilot can walk away from a match at any (non-terminal) stage.
-router.post('/matches/:id/unmatch', requireAuth, (req, res) => {
-  const match = getMatchOr404(req, res);
-  if (!match) return;
+router.post('/matches/:id/unmatch', requireAuth, async (req, res) => {
+  const match = await getMatchById(req.params.id);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
   if (!isPilotOfMatch(req.userId, match)) {
     return res.status(403).json({ error: 'Only the two pilots can unmatch' });
   }
-  if (!assertActive(match, res)) return;
+  if (TERMINAL_STATUSES.includes(match.status)) {
+    return res.status(400).json({ error: 'This match has already ended' });
+  }
 
-  const updated = db.prepare(`UPDATE matches SET status = 'unmatched' WHERE id = ? RETURNING *`).get(match.id);
-  res.json({ match: serializeMatch(updated, req.userId) });
+  await db.collection('matches').doc(match.id).update({ status: 'unmatched' });
+  const updated = await getMatchById(match.id);
+  res.json({ match: await serializeMatch(updated, req.userId) });
 });
 
-router.post('/matches/:id/mark-read', requireAuth, (req, res) => {
-  const match = getMatchOr404(req, res);
-  if (!match) return;
+router.post('/matches/:id/mark-read', requireAuth, async (req, res) => {
+  const match = await getMatchById(req.params.id);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
   if (!isPilotOfMatch(req.userId, match)) {
     return res.status(403).json({ error: 'Not authorized for this room' });
   }
-  markChatRead(req.userId, 'pilot', match.id);
+  await markChatRead(req.userId, 'pilot', match.id);
   res.json({ ok: true });
 });
 
-router.get('/matches/:id/pilot-messages', requireAuth, (req, res) => {
-  const match = getMatchOr404(req, res);
-  if (!match) return;
+router.get('/matches/:id/pilot-messages', requireAuth, async (req, res) => {
+  const match = await getMatchById(req.params.id);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
   if (!isPilotOfMatch(req.userId, match)) {
     return res.status(403).json({ error: 'Only the two pilots can view this chat' });
   }
-  const messages = getMessages('pilot', match.id);
-  markChatRead(req.userId, 'pilot', match.id);
+  const messages = await getMessages('pilot', match.id);
+  await markChatRead(req.userId, 'pilot', match.id);
   res.json({ messages });
 });
 

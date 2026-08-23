@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
-import db from '../db.js';
+import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,90 +26,82 @@ const upload = multer({
 
 const router = express.Router();
 
-const PROFILE_COLUMNS = {
-  age: 'age',
-  gender: 'gender',
-  interestedIn: 'interested_in',
-  bio: 'bio',
-  location: 'location',
-  photoUrl: 'photo_url',
-};
-
 // Partial upsert: only the keys present in `fields` are written, so a photo
-// upload can update just photo_url without touching the rest of the profile.
-function upsertProfile(userId, fields) {
-  const keys = Object.keys(fields);
-  const values = keys.map((k) => fields[k] ?? null);
-  const existing = db.prepare('SELECT id FROM pilot_profiles WHERE user_id = ?').get(userId);
-
-  if (existing) {
-    const setClause = keys.map((k) => `${PROFILE_COLUMNS[k]} = ?`).join(', ');
-    db.prepare(`UPDATE pilot_profiles SET ${setClause}, updated_at = datetime('now') WHERE user_id = ?`).run(...values, userId);
-  } else {
-    const columns = ['user_id', ...keys.map((k) => PROFILE_COLUMNS[k])];
-    db.prepare(
-      `INSERT INTO pilot_profiles (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`
-    ).run(userId, ...values);
-  }
-
-  return db.prepare('SELECT * FROM pilot_profiles WHERE user_id = ?').get(userId);
+// upload can update just photoUrl without touching the rest of the profile.
+async function upsertProfile(userId, fields) {
+  const ref = db.collection('pilotProfiles').doc(userId);
+  const existing = await ref.get();
+  const now = new Date().toISOString();
+  await ref.set({ ...fields, updatedAt: now, ...(existing.exists ? {} : { createdAt: now }) }, { merge: true });
+  return (await ref.get()).data();
 }
 
-router.get('/me', requireAuth, (req, res) => {
-  const profile = db.prepare('SELECT * FROM pilot_profiles WHERE user_id = ?').get(req.userId);
-  res.json({ profile: profile || null });
+router.get('/me', requireAuth, async (req, res) => {
+  const doc = await db.collection('pilotProfiles').doc(req.userId).get();
+  res.json({ profile: doc.exists ? doc.data() : null });
 });
 
-router.put('/me', requireAuth, (req, res) => {
+router.put('/me', requireAuth, async (req, res) => {
   const { age, gender, interestedIn, bio, location, photoUrl } = req.body;
-  const profile = upsertProfile(req.userId, { age, gender, interestedIn, bio, location, photoUrl });
+  const profile = await upsertProfile(req.userId, {
+    age: age ?? null,
+    gender: gender ?? null,
+    interestedIn: interestedIn ?? null,
+    bio: bio ?? null,
+    location: location ?? null,
+    photoUrl: photoUrl ?? null,
+  });
   res.json({ profile });
 });
 
 router.post('/me/photo', requireAuth, (req, res) => {
-  upload.single('photo')(req, res, (err) => {
+  upload.single('photo')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
 
     const photoUrl = `/uploads/${req.file.filename}`;
-    upsertProfile(req.userId, { photoUrl });
+    await upsertProfile(req.userId, { photoUrl });
     res.json({ photoUrl });
   });
 });
 
-// Discover feed: other pilots with a complete profile, not yet swiped by the current user.
-// Optional query filters: minAge, maxAge, gender (exact match, case-insensitive).
-router.get('/discover', requireAuth, (req, res) => {
+// Discover feed: other pilots with a complete profile, not yet swiped by the
+// current user. Optional filters: minAge, maxAge, gender (exact, case-insensitive).
+// Profiles are fetched in full and filtered in memory — fine at this scale,
+// and it avoids needing composite indexes for the filter combinations below.
+router.get('/discover', requireAuth, async (req, res) => {
   const { minAge, maxAge, gender } = req.query;
-  const clauses = [
-    'u.id != ?',
-    'u.id NOT IN (SELECT target_user_id FROM swipes WHERE swiper_user_id = ?)',
-  ];
-  const params = [req.userId, req.userId];
 
-  if (minAge) {
-    clauses.push('p.age IS NOT NULL AND p.age >= ?');
-    params.push(Number(minAge));
-  }
-  if (maxAge) {
-    clauses.push('p.age IS NOT NULL AND p.age <= ?');
-    params.push(Number(maxAge));
-  }
-  if (gender) {
-    clauses.push('LOWER(p.gender) = LOWER(?)');
-    params.push(gender);
-  }
+  const swipedSnap = await db.collection('swipes').where('swiperUserId', '==', req.userId).get();
+  const swipedIds = new Set(swipedSnap.docs.map((d) => d.data().targetUserId));
 
-  const rows = db
-    .prepare(
-      `SELECT u.id as userId, u.name, p.age, p.gender, p.interested_in as interestedIn, p.bio, p.location, p.photo_url as photoUrl
-       FROM pilot_profiles p
-       JOIN users u ON u.id = p.user_id
-       WHERE ${clauses.join(' AND ')}
-       ORDER BY p.created_at DESC`
-    )
-    .all(...params);
-  res.json({ profiles: rows });
+  const profilesSnap = await db.collection('pilotProfiles').get();
+  let candidates = profilesSnap.docs
+    .map((d) => ({ userId: d.id, ...d.data() }))
+    .filter((p) => p.userId !== req.userId && !swipedIds.has(p.userId));
+
+  if (minAge) candidates = candidates.filter((p) => p.age != null && p.age >= Number(minAge));
+  if (maxAge) candidates = candidates.filter((p) => p.age != null && p.age <= Number(maxAge));
+  if (gender) candidates = candidates.filter((p) => (p.gender || '').toLowerCase() === gender.toLowerCase());
+
+  candidates.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+  const userIds = candidates.map((p) => p.userId);
+  const users = await Promise.all(userIds.map((id) => db.collection('users').doc(id).get()));
+  const nameById = new Map(users.map((u) => [u.id, u.data()?.name]));
+
+  const profiles = candidates.map((p) => ({
+    userId: p.userId,
+    name: nameById.get(p.userId),
+    age: p.age,
+    gender: p.gender,
+    interestedIn: p.interestedIn,
+    bio: p.bio,
+    location: p.location,
+    photoUrl: p.photoUrl,
+  }));
+
+  res.json({ profiles });
 });
 
 export default router;
