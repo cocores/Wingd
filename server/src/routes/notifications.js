@@ -73,4 +73,22 @@ router.post('/mark-copilots-seen', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// The token is the doc id, so re-registering it (a new login on the same
+// device, say) just reassigns ownership instead of creating a duplicate.
+router.post('/register-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token is required' });
+  await db.collection('pushTokens').doc(token).set({ userId: req.userId, updatedAt: new Date().toISOString() });
+  res.json({ ok: true });
+});
+
+router.post('/unregister-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token is required' });
+  const ref = db.collection('pushTokens').doc(token);
+  const doc = await ref.get();
+  if (doc.exists && doc.data().userId === req.userId) await ref.delete();
+  res.json({ ok: true });
+});
+
 export default router;

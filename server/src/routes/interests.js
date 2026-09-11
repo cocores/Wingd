@@ -1,9 +1,10 @@
 import express from 'express';
 import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
-import { acceptedCircleSize, getAcceptedCopilotPilotIds, isAcceptedCopilotFor } from '../lib/circles.js';
+import { acceptedCircleSize, getAcceptedCopilotPilotIds, getAcceptedWingIds, isAcceptedCopilotFor } from '../lib/circles.js';
 import { getMessages, markChatRead } from '../lib/chat.js';
 import { isPremium, getDailyLikeCap, getTodayLikeCount, tryConsumeDailyLike } from '../lib/premium.js';
+import { sendPushToUser, sendPushToUsers } from '../lib/push.js';
 
 const router = express.Router();
 
@@ -64,6 +65,13 @@ async function tryCreateMutualMatch(interest) {
     status: 'matched',
     createdAt: new Date().toISOString(),
   });
+
+  const [aUserDoc, bUserDoc] = await Promise.all([db.collection('users').doc(pilotAId).get(), db.collection('users').doc(pilotBId).get()]);
+  const url = `/matches/${docId}/pilot-chat`;
+  await Promise.all([
+    sendPushToUser(pilotAId, { title: 'You matched! 🛩️', body: `You and ${bUserDoc.data()?.name} matched — say hello!`, url }),
+    sendPushToUser(pilotBId, { title: 'You matched! 🛩️', body: `You and ${aUserDoc.data()?.name} matched — say hello!`, url }),
+  ]);
 }
 
 // A circle with nobody in it has nothing to review, so the interest sends
@@ -75,10 +83,19 @@ async function createOrGetInterest(fromUserId, toUserId) {
   const doc = await ref.get();
   if (!doc.exists) {
     const now = new Date().toISOString();
-    const circleSize = await acceptedCircleSize(fromUserId);
-    const status = circleSize === 0 ? 'sent' : 'pending_wings';
+    const wingIds = await getAcceptedWingIds(fromUserId);
+    const status = wingIds.length === 0 ? 'sent' : 'pending_wings';
     await ref.set({ fromUserId, toUserId, status, createdAt: now, updatedAt: now });
-    if (status === 'sent') await tryCreateMutualMatch({ id, fromUserId, toUserId });
+    if (status === 'sent') {
+      await tryCreateMutualMatch({ id, fromUserId, toUserId });
+    } else {
+      const fromUserDoc = await db.collection('users').doc(fromUserId).get();
+      await sendPushToUsers(wingIds, {
+        title: 'Your wing queue has a new one 🗳️',
+        body: `${fromUserDoc.data()?.name} wants your vote on someone they're interested in.`,
+        url: '/wing-queue',
+      });
+    }
   }
   return getInterestById(id);
 }

@@ -47,6 +47,23 @@ See `server/.env.example` for the Stripe setup (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_PREMIUM_PRICE_ID`) — without these, checkout
 and the billing portal return a 501 and the free limits always apply.
 
+## Push notifications
+
+An "Enable notifications" card on the **Profile** page (hidden unless
+configured) registers a browser for push via Firebase Cloud Messaging.
+Pushes fire on: a new match, a new pilot/wing chat message, and a new
+interest landing in a wing's queue. A foreground toast covers the case
+where a push arrives while a tab is open and focused; the browser handles
+background/closed-tab delivery as a system notification via
+`client/public/firebase-messaging-sw.js`.
+
+Needs a Firebase project with Cloud Messaging enabled — the local Firestore
+emulator doesn't emulate FCM, so this can't be exercised end-to-end without
+one. Set the `VITE_FIREBASE_*` vars in `client/.env.example` (all public web
+config, safe to ship to the browser) — leaving any blank hides the button.
+A push failure never breaks the request that triggered it (`server/src/lib/push.js`
+always catches and cleans up dead tokens instead of throwing).
+
 ## Stack
 
 - **Backend**: Node.js, Express, Firestore (via `firebase-admin`), Socket.io

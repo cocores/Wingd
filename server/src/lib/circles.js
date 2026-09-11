@@ -24,6 +24,11 @@ export async function acceptedCircleSize(pilotUserId) {
   return links.filter((l) => l.status === 'accepted').length;
 }
 
+export async function getAcceptedWingIds(pilotUserId) {
+  const links = await copilotLinksForPilot(pilotUserId);
+  return links.filter((l) => l.status === 'accepted').map((l) => l.copilotUserId);
+}
+
 export function copilotSideForPilotIds(pilotIds, match) {
   if (pilotIds.has(match.pilotAId)) return 'a';
   if (pilotIds.has(match.pilotBId)) return 'b';

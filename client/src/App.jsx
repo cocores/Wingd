@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import NavBar from './components/NavBar.jsx';
+import PushToast from './components/PushToast.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <>
       <NavBar />
+      <PushToast />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/discover" replace /> : <Login />} />
         <Route path="/signup" element={user ? <Navigate to="/discover" replace /> : <Signup />} />

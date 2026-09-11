@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import LocationInput from '../components/LocationInput.jsx';
 import { GENDER_OPTIONS, INTERESTED_IN_OPTIONS } from '../constants.js';
 import Avatar from '../components/Avatar.jsx';
+import { pushConfigured, pushSupported, currentPermission, enablePushNotifications } from '../lib/push.js';
 
 export default function ProfileSetup() {
   const { user, setHasProfile } = useAuth();
@@ -21,6 +22,9 @@ export default function ProfileSetup() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const fileInputRef = useRef(null);
+  const [notifStatus, setNotifStatus] = useState(null);
+  const [notifError, setNotifError] = useState('');
+  const [enablingNotif, setEnablingNotif] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -36,7 +40,25 @@ export default function ProfileSetup() {
         });
       }
     })();
+    (async () => {
+      if (!pushConfigured()) return;
+      setNotifStatus((await pushSupported()) ? currentPermission() : 'unsupported');
+    })();
   }, []);
+
+  async function handleEnableNotifications() {
+    setNotifError('');
+    setEnablingNotif(true);
+    try {
+      await enablePushNotifications();
+      setNotifStatus('granted');
+    } catch (err) {
+      setNotifError(err.message);
+      setNotifStatus(currentPermission());
+    } finally {
+      setEnablingNotif(false);
+    }
+  }
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -132,6 +154,24 @@ export default function ProfileSetup() {
           {submitting ? 'Saving…' : 'Save profile'}
         </button>
       </form>
+
+      {notifStatus && (
+        <div className="card">
+          <h3>Push notifications</h3>
+          <p className="muted">Get notified about new matches, wing votes, and messages — even when Wingd isn't open.</p>
+          {notifError && <p className="error">{notifError}</p>}
+          {notifStatus === 'granted' && <p className="success">Notifications are on.</p>}
+          {notifStatus === 'denied' && (
+            <p className="muted">Blocked — enable notifications for this site in your browser's settings to turn them back on.</p>
+          )}
+          {notifStatus === 'unsupported' && <p className="muted">Not supported in this browser.</p>}
+          {notifStatus === 'default' && (
+            <button onClick={handleEnableNotifications} disabled={enablingNotif}>
+              {enablingNotif ? 'Enabling…' : 'Enable notifications'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
