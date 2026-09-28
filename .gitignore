@@ -10,3 +10,5 @@ server/uploads/*
 firestore-debug.log
 firebase-debug.log
 .firebase/
+server/*service-account*.json
+server/*credentials*.json
