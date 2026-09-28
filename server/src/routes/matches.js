@@ -24,8 +24,12 @@ async function getCopilotSide(copilotUserId, match) {
 
 async function getUserMap(ids) {
   const uniqueIds = [...new Set(ids)];
-  const docs = await Promise.all(uniqueIds.map((id) => db.collection('users').doc(id).get()));
-  return new Map(docs.map((d) => [d.id, { id: d.id, name: d.data()?.name }]));
+  const [userDocs, profileDocs] = await Promise.all([
+    Promise.all(uniqueIds.map((id) => db.collection('users').doc(id).get())),
+    Promise.all(uniqueIds.map((id) => db.collection('pilotProfiles').doc(id).get())),
+  ]);
+  const verifiedById = new Map(profileDocs.map((d) => [d.id, !!d.data()?.verified]));
+  return new Map(userDocs.map((d) => [d.id, { id: d.id, name: d.data()?.name, verified: verifiedById.get(d.id) || false }]));
 }
 
 // The vouch context for one side of a match: how many wings approved and any

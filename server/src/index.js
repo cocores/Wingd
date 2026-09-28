@@ -44,6 +44,16 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Express 4 doesn't route a rejected promise from an async handler to the
+// error middleware above unless the handler explicitly catches and calls
+// next(err) — an uncaught one is an unhandled rejection, which crashes the
+// whole process by default. Log and carry on instead: one bad request (a
+// corrupt upload, a downstream API hiccup) should never take the server
+// down for everyone else.
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection (recovered):', err);
+});
+
 const httpServer = createServer(app);
 attachSocket(httpServer, clientOrigin);
 

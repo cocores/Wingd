@@ -64,6 +64,32 @@ config, safe to ship to the browser) — leaving any blank hides the button.
 A push failure never breaks the request that triggered it (`server/src/lib/push.js`
 always catches and cleans up dead tokens instead of throwing).
 
+## Photo verification
+
+A "Get verified" flow on **Profile** (`/verify`) opens the camera, asks for
+a random live pose ("turn your head left," etc.), and checks the captured
+frame against the pilot's existing profile photo. Passing gets a ✓ badge
+shown next to their name on Discover, Wing Queue, Admirers, and Matches.
+
+Both checks run server-side (`server/src/lib/faceVerification.js`,
+[`@vladmandic/face-api`](https://github.com/vladmandic/face-api) + a pure
+WASM TensorFlow backend, no native compile step) so a client can't just
+report success on its own: the pose check blocks the naive "upload some
+other photo" attack, and the face match (a 128-d descriptor comparison,
+threshold calibrated against real photos, not just the library's stock
+guidance — see the comment above `MATCH_THRESHOLD`) is what the badge
+actually promises. The client-side check in `client/src/lib/faceVerify.js`
+is UX only — it decides when to enable the Capture button, nothing more.
+
+This is a real but self-admittedly soft check: it stops casual catfishing
+(stolen photos, mismatched profile pics) and the naive re-upload attack,
+not a determined adversary — there's no depth/IR liveness sensor here, just
+2D landmark geometry. Uploading a new profile photo resets `verified` to
+false, since the badge is a claim about the *current* photo. Model weights
+(~7MB, `server/models/` and `client/public/models/`) are fetched once from
+[vladmandic/face-api's model repo](https://github.com/vladmandic/face-api)
+and committed rather than fetched at runtime.
+
 ## Stack
 
 - **Backend**: Node.js, Express, Firestore (via `firebase-admin`), Socket.io
@@ -220,6 +246,7 @@ exact shapes):
   `emailIndex/{email}` holds `{ userId }` and is the atomic uniqueness
   constraint on email (doc id = lowercased email).
 - `pilotProfiles` — one dating profile per user, doc id = user id.
+  `verified`/`verifiedAt` track photo verification; a new photo resets both.
 - `copilotLinks` — invite + acceptance linking a wing to a pilot (capped at
   5 accepted per pilot).
 - `swipes` — like/pass history, keyed by `{swiperId}__{targetId}`.

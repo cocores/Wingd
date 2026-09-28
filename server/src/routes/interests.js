@@ -117,7 +117,14 @@ async function serializeInterest(interest, viewerUserId) {
     id: interest.id,
     status: interest.status,
     fromUser: { id: interest.fromUserId, name: fromUserDoc.data()?.name },
-    toUser: { id: interest.toUserId, name: toUserDoc.data()?.name, age: toProfile.age ?? null, photoUrl: toProfile.photoUrl ?? null, bio: toProfile.bio ?? null },
+    toUser: {
+      id: interest.toUserId,
+      name: toUserDoc.data()?.name,
+      age: toProfile.age ?? null,
+      photoUrl: toProfile.photoUrl ?? null,
+      bio: toProfile.bio ?? null,
+      verified: !!toProfile.verified,
+    },
     isMine: viewerUserId === interest.fromUserId,
     isWing,
     circleSize,
@@ -234,6 +241,7 @@ router.get('/interests/admirers', requireAuth, async (req, res) => {
         age: profile.age ?? null,
         photoUrl: profile.photoUrl ?? null,
         bio: profile.bio ?? null,
+        verified: !!profile.verified,
         sentAt: i.createdAt,
       };
     })

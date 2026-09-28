@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import Avatar from '../components/Avatar.jsx';
+import VerifiedBadge from '../components/VerifiedBadge.jsx';
 
 export default function Admirers() {
   const [admirers, setAdmirers] = useState(null);
@@ -55,6 +56,7 @@ export default function Admirers() {
                   <strong>
                     {a.name}
                     {a.age ? `, ${a.age}` : ''}
+                    <VerifiedBadge verified={a.verified} />
                   </strong>
                   {a.bio && <p className="bio">{a.bio}</p>}
                 </div>

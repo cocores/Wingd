@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import NavBar from './components/NavBar.jsx';
 import PushToast from './components/PushToast.jsx';
@@ -15,6 +16,11 @@ import PilotChat from './pages/PilotChat.jsx';
 import Premium from './pages/Premium.jsx';
 import Admirers from './pages/Admirers.jsx';
 import { useAuth } from './context/AuthContext.jsx';
+
+// face-api.js pulls in a multi-MB bundle (a bundled TensorFlow core) that
+// only the verification flow needs — split it into its own chunk instead of
+// shipping it on every page load.
+const Verify = lazy(() => import('./pages/Verify.jsx'));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -98,6 +104,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Admirers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/verify"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<div className="page">Loading…</div>}>
+                <Verify />
+              </Suspense>
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationInput from '../components/LocationInput.jsx';
@@ -16,6 +17,7 @@ export default function ProfileSetup() {
     location: '',
     photoUrl: '',
   });
+  const [verified, setVerified] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -33,11 +35,12 @@ export default function ProfileSetup() {
         setForm({
           age: data.profile.age ?? '',
           gender: data.profile.gender ?? '',
-          interestedIn: data.profile.interested_in ?? '',
+          interestedIn: data.profile.interestedIn ?? '',
           bio: data.profile.bio ?? '',
           location: data.profile.location ?? '',
-          photoUrl: data.profile.photo_url ?? '',
+          photoUrl: data.profile.photoUrl ?? '',
         });
+        setVerified(!!data.profile.verified);
       }
     })();
     (async () => {
@@ -74,6 +77,7 @@ export default function ProfileSetup() {
       formData.append('photo', file);
       const { data } = await api.post('/profiles/me/photo', formData);
       update('photoUrl', data.photoUrl);
+      setVerified(false);
     } catch (err) {
       setPhotoError(getErrorMessage(err, 'Could not upload photo'));
     } finally {
@@ -102,6 +106,23 @@ export default function ProfileSetup() {
     <div className="page">
       <h1>Your pilot profile</h1>
       <p className="muted">This is what other pilots (and their co-pilots) will see.</p>
+
+      <div className="card">
+        <h3>
+          Verification {verified && <span className="verify-badge">✓</span>}
+        </h3>
+        {verified ? (
+          <p className="success">You're verified — other pilots and wings can see the checkmark on your profile.</p>
+        ) : (
+          <>
+            <p className="muted">A quick live selfie check shows other pilots and wings you're really you.</p>
+            <Link to="/verify">
+              <button>Get verified</button>
+            </Link>
+          </>
+        )}
+      </div>
+
       <form className="card form" onSubmit={handleSubmit}>
         <label>
           Photo

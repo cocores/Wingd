@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import VerifiedBadge from '../components/VerifiedBadge.jsx';
 
 export default function WingQueue() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -54,6 +55,7 @@ export default function WingQueue() {
                   <strong>
                     {interest.fromUser.name} is interested in {interest.toUser.name}
                     {interest.toUser.age ? `, ${interest.toUser.age}` : ''}
+                    <VerifiedBadge verified={interest.toUser.verified} />
                   </strong>
                   {interest.toUser.bio && <p className="bio">{interest.toUser.bio}</p>}
                 </div>

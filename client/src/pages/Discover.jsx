@@ -4,6 +4,7 @@ import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
 import { GENDER_OPTIONS } from '../constants.js';
 import Avatar from '../components/Avatar.jsx';
+import VerifiedBadge from '../components/VerifiedBadge.jsx';
 
 export default function Discover() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -177,6 +178,7 @@ export default function Discover() {
           <h2>
             {current.name}
             {current.age ? `, ${current.age}` : ''}
+            <VerifiedBadge verified={current.verified} />
           </h2>
           <p className="muted">
             {[current.gender, current.location].filter(Boolean).join(' · ')}

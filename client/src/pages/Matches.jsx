@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotifications } from '../context/NotificationsContext.jsx';
+import VerifiedBadge from '../components/VerifiedBadge.jsx';
 
 function otherPilot(match, userId) {
   return match.pilotA.id === userId ? match.pilotB : match.pilotA;
@@ -68,7 +69,9 @@ export default function Matches() {
           return (
             <li key={m.id} className="card match-row">
               <div>
-                <strong>{other.name}</strong>
+                <strong>
+                  {other.name} <VerifiedBadge verified={other.verified} />
+                </strong>
                 <span className={`badge ${m.status}`}>{m.status === 'matched' ? 'Cleared for takeoff' : 'Landed'}</span>
               </div>
               <div className="match-approvals">
@@ -99,7 +102,9 @@ export default function Matches() {
         {pendingInterests.map((i) => (
           <li key={i.id} className="card match-row">
             <div>
-              <strong>{i.toUser.name}</strong>
+              <strong>
+                {i.toUser.name} <VerifiedBadge verified={i.toUser.verified} />
+              </strong>
               <span className={`badge ${i.status}`}>{INTEREST_STATUS_LABELS[i.status] || i.status}</span>
             </div>
             <p className="muted">
