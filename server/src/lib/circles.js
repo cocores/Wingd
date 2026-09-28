@@ -1,31 +1,36 @@
-import db from '../db.js';
+import db from '../firestore.js';
 
-// All pilots a user currently co-pilots for, fetched once per request to avoid
-// re-querying copilot_links per row when checking many interests/matches at once.
-export function getAcceptedCopilotPilotIds(copilotUserId) {
-  const rows = db
-    .prepare(`SELECT pilot_user_id FROM copilot_links WHERE copilot_user_id = ? AND status = 'accepted'`)
-    .all(copilotUserId);
-  return new Set(rows.map((r) => r.pilot_user_id));
+// Reads are filtered to one equality clause server-side and refined in
+// memory — wing circles are capped at 5 members, so this never scans more
+// than a handful of documents, and it avoids needing composite indexes for
+// what would otherwise be two-field equality queries.
+async function copilotLinksForPilot(pilotUserId) {
+  const snap = await db.collection('copilotLinks').where('pilotUserId', '==', pilotUserId).get();
+  return snap.docs.map((d) => d.data());
 }
 
-export function isAcceptedCopilotFor(copilotUserId, pilotUserId) {
-  const row = db
-    .prepare(`SELECT 1 FROM copilot_links WHERE copilot_user_id = ? AND pilot_user_id = ? AND status = 'accepted'`)
-    .get(copilotUserId, pilotUserId);
-  return !!row;
+export async function getAcceptedCopilotPilotIds(copilotUserId) {
+  const snap = await db.collection('copilotLinks').where('copilotUserId', '==', copilotUserId).get();
+  return new Set(snap.docs.map((d) => d.data()).filter((l) => l.status === 'accepted').map((l) => l.pilotUserId));
 }
 
-export function acceptedCircleSize(pilotUserId) {
-  const { count } = db
-    .prepare(`SELECT COUNT(*) as count FROM copilot_links WHERE pilot_user_id = ? AND status = 'accepted'`)
-    .get(pilotUserId);
-  return count;
+export async function isAcceptedCopilotFor(copilotUserId, pilotUserId) {
+  const links = await copilotLinksForPilot(pilotUserId);
+  return links.some((l) => l.copilotUserId === copilotUserId && l.status === 'accepted');
 }
 
-// Pure lookup against an already-fetched pilot-id set — no DB access.
+export async function acceptedCircleSize(pilotUserId) {
+  const links = await copilotLinksForPilot(pilotUserId);
+  return links.filter((l) => l.status === 'accepted').length;
+}
+
+export async function getAcceptedWingIds(pilotUserId) {
+  const links = await copilotLinksForPilot(pilotUserId);
+  return links.filter((l) => l.status === 'accepted').map((l) => l.copilotUserId);
+}
+
 export function copilotSideForPilotIds(pilotIds, match) {
-  if (pilotIds.has(match.pilot_a_id)) return 'a';
-  if (pilotIds.has(match.pilot_b_id)) return 'b';
+  if (pilotIds.has(match.pilotAId)) return 'a';
+  if (pilotIds.has(match.pilotBId)) return 'b';
   return null;
 }

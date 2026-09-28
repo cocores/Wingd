@@ -1,5 +1,7 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import NavBar from './components/NavBar.jsx';
+import PushToast from './components/PushToast.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -11,7 +13,14 @@ import Matches from './pages/Matches.jsx';
 import WingQueue from './pages/WingQueue.jsx';
 import WingChat from './pages/WingChat.jsx';
 import PilotChat from './pages/PilotChat.jsx';
+import Premium from './pages/Premium.jsx';
+import Admirers from './pages/Admirers.jsx';
 import { useAuth } from './context/AuthContext.jsx';
+
+// face-api.js pulls in a multi-MB bundle (a bundled TensorFlow core) that
+// only the verification flow needs — split it into its own chunk instead of
+// shipping it on every page load.
+const Verify = lazy(() => import('./pages/Verify.jsx'));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -21,6 +30,7 @@ export default function App() {
   return (
     <>
       <NavBar />
+      <PushToast />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/discover" replace /> : <Login />} />
         <Route path="/signup" element={user ? <Navigate to="/discover" replace /> : <Signup />} />
@@ -78,6 +88,32 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PilotChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/premium"
+          element={
+            <ProtectedRoute>
+              <Premium />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admirers"
+          element={
+            <ProtectedRoute>
+              <Admirers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/verify"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<div className="page">Loading…</div>}>
+                <Verify />
+              </Suspense>
             </ProtectedRoute>
           }
         />

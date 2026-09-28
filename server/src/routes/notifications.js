@@ -1,77 +1,93 @@
 import express from 'express';
-import db from '../db.js';
+import db from '../firestore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { TERMINAL_STATUSES, isPilotOfMatch, getAccessibleMatchRows } from './matches.js';
+import { voteDocId } from './interests.js';
 import { getAcceptedCopilotPilotIds } from '../lib/circles.js';
 import { lastReadAt, unreadCount } from '../lib/chat.js';
 
 const router = express.Router();
-const EPOCH = '1970-01-01 00:00:00';
+const EPOCH = '1970-01-01T00:00:00.000Z';
 
-function getNotificationState(userId) {
-  const row = db.prepare('SELECT * FROM notification_state WHERE user_id = ?').get(userId);
-  if (row) return row;
-  return { user_id: userId, matches_seen_at: EPOCH, copilots_seen_at: EPOCH };
+async function getNotificationState(userId) {
+  const doc = await db.collection('notificationState').doc(userId).get();
+  return doc.exists ? doc.data() : { matchesSeenAt: EPOCH, copilotsSeenAt: EPOCH };
 }
 
 // Every interest whose wing chat I can read: my own outgoing interests, and
 // any interest belonging to a pilot I'm an accepted co-pilot for.
-function getRelevantInterests(userId, pilotIds) {
-  const placeholders = pilotIds.length ? pilotIds.map(() => '?').join(',') : null;
-  const clause = placeholders ? `from_user_id = ? OR from_user_id IN (${placeholders})` : 'from_user_id = ?';
-  return db.prepare(`SELECT id FROM interests WHERE ${clause}`).all(userId, ...pilotIds);
+async function getRelevantInterestIds(userId, pilotIds) {
+  const ids = [...new Set([userId, ...pilotIds])];
+  const snaps = await Promise.all(ids.map((id) => db.collection('interests').where('fromUserId', '==', id).get()));
+  return snaps.flatMap((s) => s.docs.map((d) => d.id));
 }
 
-router.get('/summary', requireAuth, (req, res) => {
-  const state = getNotificationState(req.userId);
-  const matches = getAccessibleMatchRows(req.userId);
-  const pilotIds = [...getAcceptedCopilotPilotIds(req.userId)];
+router.get('/summary', requireAuth, async (req, res) => {
+  const state = await getNotificationState(req.userId);
+  const matches = await getAccessibleMatchRows(req.userId);
+  const pilotIds = [...(await getAcceptedCopilotPilotIds(req.userId))];
 
-  const newMatches = matches.filter((m) => m.created_at > state.matches_seen_at).length;
+  const newMatches = matches.filter((m) => m.createdAt > state.matchesSeenAt).length;
 
   let unreadMessages = 0;
-  for (const interest of getRelevantInterests(req.userId, pilotIds)) {
-    unreadMessages += unreadCount('copilot', interest.id, req.userId, lastReadAt(req.userId, 'copilot', interest.id));
+  const interestIds = await getRelevantInterestIds(req.userId, pilotIds);
+  for (const interestId of interestIds) {
+    unreadMessages += await unreadCount('copilot', interestId, req.userId, await lastReadAt(req.userId, 'copilot', interestId));
   }
   for (const match of matches) {
     if (isPilotOfMatch(req.userId, match) && !TERMINAL_STATUSES.includes(match.status)) {
-      unreadMessages += unreadCount('pilot', match.id, req.userId, lastReadAt(req.userId, 'pilot', match.id));
+      unreadMessages += await unreadCount('pilot', match.id, req.userId, await lastReadAt(req.userId, 'pilot', match.id));
     }
   }
 
-  const { count: newCopilotAcceptances } = db
-    .prepare(
-      `SELECT COUNT(*) as count FROM copilot_links WHERE pilot_user_id = ? AND status = 'accepted' AND created_at > ?`
-    )
-    .get(req.userId, state.copilots_seen_at);
+  const linksSnap = await db.collection('copilotLinks').where('pilotUserId', '==', req.userId).get();
+  const newCopilotAcceptances = linksSnap.docs
+    .map((d) => d.data())
+    .filter((l) => l.status === 'accepted' && l.createdAt > state.copilotsSeenAt).length;
 
   let pendingVotes = 0;
   if (pilotIds.length > 0) {
-    const placeholders = pilotIds.map(() => '?').join(',');
-    const votedSubquery = `id NOT IN (SELECT interest_id FROM interest_votes WHERE copilot_user_id = ?)`;
-    const { count } = db
-      .prepare(`SELECT COUNT(*) as count FROM interests WHERE status = 'pending_wings' AND from_user_id IN (${placeholders}) AND ${votedSubquery}`)
-      .get(...pilotIds, req.userId);
-    pendingVotes = count;
+    const snaps = await Promise.all(pilotIds.map((id) => db.collection('interests').where('fromUserId', '==', id).get()));
+    const pendingIds = snaps
+      .flatMap((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })))
+      .filter((i) => i.status === 'pending_wings')
+      .map((i) => i.id);
+    const votedChecks = await Promise.all(pendingIds.map((id) => db.collection('interestVotes').doc(voteDocId(id, req.userId)).get()));
+    pendingVotes = votedChecks.filter((d) => !d.exists).length;
   }
 
   res.json({ newMatches, unreadMessages, newCopilotAcceptances, pendingVotes });
 });
 
-function markSeen(userId, column) {
-  db.prepare(
-    `INSERT INTO notification_state (user_id, ${column}) VALUES (?, datetime('now'))
-     ON CONFLICT(user_id) DO UPDATE SET ${column} = datetime('now')`
-  ).run(userId);
+async function markSeen(userId, field) {
+  await db.collection('notificationState').doc(userId).set({ [field]: new Date().toISOString() }, { merge: true });
 }
 
-router.post('/mark-matches-seen', requireAuth, (req, res) => {
-  markSeen(req.userId, 'matches_seen_at');
+router.post('/mark-matches-seen', requireAuth, async (req, res) => {
+  await markSeen(req.userId, 'matchesSeenAt');
   res.json({ ok: true });
 });
 
-router.post('/mark-copilots-seen', requireAuth, (req, res) => {
-  markSeen(req.userId, 'copilots_seen_at');
+router.post('/mark-copilots-seen', requireAuth, async (req, res) => {
+  await markSeen(req.userId, 'copilotsSeenAt');
+  res.json({ ok: true });
+});
+
+// The token is the doc id, so re-registering it (a new login on the same
+// device, say) just reassigns ownership instead of creating a duplicate.
+router.post('/register-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token is required' });
+  await db.collection('pushTokens').doc(token).set({ userId: req.userId, updatedAt: new Date().toISOString() });
+  res.json({ ok: true });
+});
+
+router.post('/unregister-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token is required' });
+  const ref = db.collection('pushTokens').doc(token);
+  const doc = await ref.get();
+  if (doc.exists && doc.data().userId === req.userId) await ref.delete();
   res.json({ ok: true });
 });
 

@@ -7,3 +7,8 @@ dist/
 .DS_Store
 server/uploads/*
 !server/uploads/.gitkeep
+firestore-debug.log
+firebase-debug.log
+.firebase/
+server/*service-account*.json
+server/*credentials*.json

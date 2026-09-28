@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
+import db from '../firestore.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID || '';
@@ -52,17 +53,23 @@ export async function verifyAppleCredential(idToken, fallbackName) {
 // Finds the user a social login belongs to, linking or creating an account
 // as needed: match by provider id first, then by email (linking the
 // provider id onto that existing account), then create a brand-new user.
-export function findOrCreateSocialUser(db, { provider, providerId, email, name }) {
-  const column = provider === 'google' ? 'google_id' : 'apple_id';
+export async function findOrCreateSocialUser({ provider, providerId, email, name }) {
+  const field = provider === 'google' ? 'googleId' : 'appleId';
 
-  let user = db.prepare(`SELECT * FROM users WHERE ${column} = ?`).get(providerId);
-  if (user) return user;
+  const byProvider = await db.collection('users').where(field, '==', providerId).limit(1).get();
+  if (!byProvider.empty) {
+    const doc = byProvider.docs[0];
+    return { id: doc.id, ...doc.data() };
+  }
 
   if (email) {
-    user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
-    if (user) {
-      db.prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(providerId, user.id);
-      return db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+    const emailKey = email.toLowerCase();
+    const indexDoc = await db.collection('emailIndex').doc(emailKey).get();
+    if (indexDoc.exists) {
+      const userRef = db.collection('users').doc(indexDoc.data().userId);
+      await userRef.update({ [field]: providerId });
+      const updated = await userRef.get();
+      return { id: updated.id, ...updated.data() };
     }
   }
 
@@ -70,9 +77,13 @@ export function findOrCreateSocialUser(db, { provider, providerId, email, name }
     throw new Error('NO_EMAIL');
   }
 
+  const emailKey = email.toLowerCase();
   const displayName = name || email.split('@')[0];
-  const result = db
-    .prepare(`INSERT INTO users (email, name, ${column}) VALUES (?, ?, ?)`)
-    .run(email.toLowerCase(), displayName, providerId);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+  const userRef = db.collection('users').doc();
+  // Reserves the email atomically the same way signup does — .create() fails
+  // if another request already claimed it (e.g. a concurrent social login).
+  await db.collection('emailIndex').doc(emailKey).create({ userId: userRef.id });
+  const doc = { email: emailKey, name: displayName, [field]: providerId, createdAt: new Date().toISOString() };
+  await userRef.set(doc);
+  return { id: userRef.id, ...doc };
 }

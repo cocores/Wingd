@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, getErrorMessage } from '../api';
 import { useNotifications } from '../context/NotificationsContext.jsx';
-import { resolveAssetUrl } from '../config.js';
+import { GENDER_OPTIONS } from '../constants.js';
+import Avatar from '../components/Avatar.jsx';
+import VerifiedBadge from '../components/VerifiedBadge.jsx';
 
 export default function Discover() {
   const { refresh: refreshNotifications } = useNotifications();
@@ -12,10 +14,19 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ minAge: '', maxAge: '', gender: '' });
+  const [likeStatus, setLikeStatus] = useState(null);
+  const [swipeError, setSwipeError] = useState('');
+  const [canUndo, setCanUndo] = useState(false);
 
   useEffect(() => {
     load();
+    refreshLikeStatus();
   }, []);
+
+  async function refreshLikeStatus() {
+    const { data } = await api.get('/interests/like-status');
+    setLikeStatus(data);
+  }
 
   async function load(activeFilters = filters) {
     setLoading(true);
@@ -47,16 +58,36 @@ export default function Discover() {
   async function swipe(direction) {
     const target = profiles[index];
     if (!target) return;
-    const { data } = await api.post('/swipes', { targetUserId: target.userId, direction });
-    if (data.interest) {
-      setInterestNotice({ name: target.name, status: data.interest.status });
-      refreshNotifications();
+    setSwipeError('');
+    try {
+      const { data } = await api.post('/swipes', { targetUserId: target.userId, direction });
+      if (data.interest) {
+        setInterestNotice({ name: target.name, status: data.interest.status });
+        refreshNotifications();
+      }
+      if (direction === 'like') refreshLikeStatus();
+      setIndex((i) => i + 1);
+      setCanUndo(true);
+    } catch (err) {
+      setSwipeError(getErrorMessage(err, 'Could not record that swipe'));
     }
-    setIndex((i) => i + 1);
+  }
+
+  async function undo() {
+    setSwipeError('');
+    try {
+      await api.post('/swipes/undo');
+      setIndex((i) => Math.max(0, i - 1));
+      setCanUndo(false);
+      refreshLikeStatus();
+    } catch (err) {
+      setSwipeError(getErrorMessage(err, 'Could not undo that swipe'));
+    }
   }
 
   const current = profiles[index];
   const filtersActive = filters.minAge || filters.maxAge || filters.gender;
+  const likesLeft = likeStatus && likeStatus.dailyCap != null ? likeStatus.dailyCap - likeStatus.usedToday : null;
 
   return (
     <div className="page">
@@ -67,6 +98,20 @@ export default function Discover() {
           {filtersActive ? ' •' : ''}
         </button>
       </div>
+
+      {likeStatus && (
+        <p className="muted">
+          {likesLeft == null ? 'Unlimited likes today ✨' : `${Math.max(0, likesLeft)} like${likesLeft === 1 ? '' : 's'} left today`}
+          {likesLeft != null && likesLeft <= 0 && (
+            <>
+              {' — '}
+              <Link to="/premium">upgrade for unlimited</Link>
+            </>
+          )}
+        </p>
+      )}
+
+      {swipeError && <p className="error">{swipeError}</p>}
 
       {showFilters && (
         <form className="card form form-inline filters-form" onSubmit={applyFilters}>
@@ -80,7 +125,14 @@ export default function Discover() {
           </label>
           <label>
             Gender
-            <input value={filters.gender} onChange={(e) => updateFilter('gender', e.target.value)} placeholder="e.g. woman" />
+            <select value={filters.gender} onChange={(e) => updateFilter('gender', e.target.value)}>
+              <option value="">Anyone</option>
+              {GENDER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </label>
           <button type="submit">Apply</button>
           <button type="button" className="link-btn" onClick={clearFilters}>
@@ -114,13 +166,19 @@ export default function Discover() {
         <div className="card">
           <p>No more pilots to discover right now{filtersActive ? ' with these filters' : ''}. Check back later!</p>
           <button onClick={() => load()}>Refresh</button>
+          {canUndo && index > 0 && (
+            <button className="link-btn" onClick={undo}>
+              ↩ Undo last swipe
+            </button>
+          )}
         </div>
       ) : (
         <div className="swipe-card">
-          {current.photoUrl && <img src={resolveAssetUrl(current.photoUrl)} alt={current.name} className="swipe-photo" />}
+          <Avatar name={current.name} photoUrl={current.photoUrl} className="swipe-photo" />
           <h2>
             {current.name}
             {current.age ? `, ${current.age}` : ''}
+            <VerifiedBadge verified={current.verified} />
           </h2>
           <p className="muted">
             {[current.gender, current.location].filter(Boolean).join(' · ')}
@@ -135,6 +193,11 @@ export default function Discover() {
               ♥ Like
             </button>
           </div>
+          {canUndo && index > 0 && (
+            <button className="link-btn" onClick={undo}>
+              ↩ Undo last swipe
+            </button>
+          )}
         </div>
       )}
     </div>

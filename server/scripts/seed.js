@@ -1,9 +1,10 @@
 // Seeds a handful of known test accounts for manual QA / demos. Safe to
-// re-run: existing seed users are deleted first (cascades clean up their
-// profiles, wing links, interests, and matches) and recreated fresh.
+// re-run: existing seed users are deleted first (including their profile,
+// wing links, interests, and matches) and recreated fresh.
+import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import db from '../src/db.js';
+import db from '../src/firestore.js';
 
 const PASSWORD = 'password123';
 
@@ -14,44 +15,87 @@ const USERS = [
   { email: 'wing2@wingd.test', name: 'Wing Two', profile: null },
 ];
 
-function createUser({ email, name }) {
-  db.prepare('DELETE FROM users WHERE email = ?').run(email);
+async function deleteExistingUser(email) {
+  const indexRef = db.collection('emailIndex').doc(email);
+  const indexDoc = await indexRef.get();
+  if (!indexDoc.exists) return;
+  const userId = indexDoc.data().userId;
+
+  const [asPilot, asCopilot, asFrom, asTo, votesByMe, matchesA, matchesB] = await Promise.all([
+    db.collection('copilotLinks').where('pilotUserId', '==', userId).get(),
+    db.collection('copilotLinks').where('copilotUserId', '==', userId).get(),
+    db.collection('interests').where('fromUserId', '==', userId).get(),
+    db.collection('interests').where('toUserId', '==', userId).get(),
+    db.collection('interestVotes').where('copilotUserId', '==', userId).get(),
+    db.collection('matches').where('pilotAId', '==', userId).get(),
+    db.collection('matches').where('pilotBId', '==', userId).get(),
+  ]);
+  const toDelete = [...asPilot.docs, ...asCopilot.docs, ...asFrom.docs, ...asTo.docs, ...votesByMe.docs, ...matchesA.docs, ...matchesB.docs];
+  await Promise.all(toDelete.map((d) => d.ref.delete()));
+
+  await Promise.all([
+    db.collection('pilotProfiles').doc(userId).delete(),
+    db.collection('users').doc(userId).delete(),
+    indexRef.delete(),
+  ]);
+}
+
+async function createUser({ email, name }) {
+  await deleteExistingUser(email);
   const passwordHash = bcrypt.hashSync(PASSWORD, 10);
-  const { lastInsertRowid } = db
-    .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-    .run(email, passwordHash, name);
-  return lastInsertRowid;
+  const userRef = db.collection('users').doc();
+  await db.collection('emailIndex').doc(email).create({ userId: userRef.id });
+  await userRef.set({ email, passwordHash, name, createdAt: new Date().toISOString() });
+  return userRef.id;
 }
 
-function setProfile(userId, profile) {
+async function setProfile(userId, profile) {
   if (!profile) return;
-  db.prepare(
-    `INSERT INTO pilot_profiles (user_id, age, gender, interested_in, bio, location) VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(userId, profile.age, profile.gender, profile.interestedIn, profile.bio, profile.location);
+  const now = new Date().toISOString();
+  await db.collection('pilotProfiles').doc(userId).set({ ...profile, photoUrl: null, createdAt: now, updatedAt: now });
 }
 
-function acceptedWingLink(pilotUserId, copilotUserId, relationshipLabel) {
-  db.prepare(
-    `INSERT INTO copilot_links (pilot_user_id, copilot_user_id, relationship_label, invite_code, status)
-     VALUES (?, ?, ?, ?, 'accepted')`
-  ).run(pilotUserId, copilotUserId, relationshipLabel, randomBytes(6).toString('hex'));
+async function acceptedWingLink(pilotUserId, copilotUserId, relationshipLabel) {
+  await db.collection('copilotLinks').add({
+    pilotUserId,
+    copilotUserId,
+    copilotEmail: null,
+    relationshipLabel,
+    inviteCode: randomBytes(6).toString('hex'),
+    status: 'accepted',
+    createdAt: new Date().toISOString(),
+  });
 }
 
 const ids = {};
 for (const u of USERS) {
-  ids[u.email] = createUser(u);
-  setProfile(ids[u.email], u.profile);
+  ids[u.email] = await createUser(u);
+  await setProfile(ids[u.email], u.profile);
 }
 
-acceptedWingLink(ids['alice@wingd.test'], ids['wing1@wingd.test'], 'Best friend');
-acceptedWingLink(ids['alice@wingd.test'], ids['wing2@wingd.test'], 'College roommate');
+await acceptedWingLink(ids['alice@wingd.test'], ids['wing1@wingd.test'], 'Best friend');
+await acceptedWingLink(ids['alice@wingd.test'], ids['wing2@wingd.test'], 'College roommate');
 
+const now = new Date().toISOString();
 // Alice likes Bob: queued for her wing circle to vote on (canVote demo).
-db.prepare(`INSERT INTO interests (from_user_id, to_user_id) VALUES (?, ?)`).run(ids['alice@wingd.test'], ids['bob@wingd.test']);
+await db.collection('interests').doc(`${ids['alice@wingd.test']}__${ids['bob@wingd.test']}`).set({
+  fromUserId: ids['alice@wingd.test'],
+  toUserId: ids['bob@wingd.test'],
+  status: 'pending_wings',
+  createdAt: now,
+  updatedAt: now,
+});
 // Bob likes Alice: Bob has no wings, so this auto-sends (empty-circle demo).
-db.prepare(`INSERT INTO interests (from_user_id, to_user_id, status) VALUES (?, ?, 'sent')`).run(ids['bob@wingd.test'], ids['alice@wingd.test']);
+await db.collection('interests').doc(`${ids['bob@wingd.test']}__${ids['alice@wingd.test']}`).set({
+  fromUserId: ids['bob@wingd.test'],
+  toUserId: ids['alice@wingd.test'],
+  status: 'sent',
+  createdAt: now,
+  updatedAt: now,
+});
 
 console.log('Seeded test accounts (all use password: %s):', PASSWORD);
 for (const u of USERS) console.log(`  ${u.email}`);
-console.log('\nAlice -> Bob interest is queued in Wing One / Wing Two\'s Wing Queue.');
-console.log('Bob -> Alice interest auto-sent (Bob has no wing circle) — log in as Wing One/Two and approve to trigger a match.');
+console.log("\nAlice -> Bob interest is queued in Wing One / Wing Two's Wing Queue.");
+console.log("Bob -> Alice interest auto-sent (Bob has no wing circle) — log in as Wing One/Two and approve to trigger a match.");
+process.exit(0);

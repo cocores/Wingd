@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationInput from '../components/LocationInput.jsx';
-import { resolveAssetUrl } from '../config.js';
+import { GENDER_OPTIONS, INTERESTED_IN_OPTIONS } from '../constants.js';
+import Avatar from '../components/Avatar.jsx';
+import { pushConfigured, pushSupported, currentPermission, enablePushNotifications } from '../lib/push.js';
 
 export default function ProfileSetup() {
-  const { setHasProfile } = useAuth();
+  const { user, setHasProfile } = useAuth();
   const [form, setForm] = useState({
     age: '',
     gender: '',
@@ -14,12 +17,16 @@ export default function ProfileSetup() {
     location: '',
     photoUrl: '',
   });
+  const [verified, setVerified] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const fileInputRef = useRef(null);
+  const [notifStatus, setNotifStatus] = useState(null);
+  const [notifError, setNotifError] = useState('');
+  const [enablingNotif, setEnablingNotif] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -28,14 +35,33 @@ export default function ProfileSetup() {
         setForm({
           age: data.profile.age ?? '',
           gender: data.profile.gender ?? '',
-          interestedIn: data.profile.interested_in ?? '',
+          interestedIn: data.profile.interestedIn ?? '',
           bio: data.profile.bio ?? '',
           location: data.profile.location ?? '',
-          photoUrl: data.profile.photo_url ?? '',
+          photoUrl: data.profile.photoUrl ?? '',
         });
+        setVerified(!!data.profile.verified);
       }
     })();
+    (async () => {
+      if (!pushConfigured()) return;
+      setNotifStatus((await pushSupported()) ? currentPermission() : 'unsupported');
+    })();
   }, []);
+
+  async function handleEnableNotifications() {
+    setNotifError('');
+    setEnablingNotif(true);
+    try {
+      await enablePushNotifications();
+      setNotifStatus('granted');
+    } catch (err) {
+      setNotifError(err.message);
+      setNotifStatus(currentPermission());
+    } finally {
+      setEnablingNotif(false);
+    }
+  }
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -51,6 +77,7 @@ export default function ProfileSetup() {
       formData.append('photo', file);
       const { data } = await api.post('/profiles/me/photo', formData);
       update('photoUrl', data.photoUrl);
+      setVerified(false);
     } catch (err) {
       setPhotoError(getErrorMessage(err, 'Could not upload photo'));
     } finally {
@@ -79,10 +106,27 @@ export default function ProfileSetup() {
     <div className="page">
       <h1>Your pilot profile</h1>
       <p className="muted">This is what other pilots (and their co-pilots) will see.</p>
+
+      <div className="card">
+        <h3>
+          Verification {verified && <span className="verify-badge">✓</span>}
+        </h3>
+        {verified ? (
+          <p className="success">You're verified — other pilots and wings can see the checkmark on your profile.</p>
+        ) : (
+          <>
+            <p className="muted">A quick live selfie check shows other pilots and wings you're really you.</p>
+            <Link to="/verify">
+              <button>Get verified</button>
+            </Link>
+          </>
+        )}
+      </div>
+
       <form className="card form" onSubmit={handleSubmit}>
         <label>
           Photo
-          {form.photoUrl && <img src={resolveAssetUrl(form.photoUrl)} alt="Profile" className="profile-photo-preview" />}
+          <Avatar name={user?.name} photoUrl={form.photoUrl} className="profile-photo-preview" />
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} disabled={uploadingPhoto} />
           {uploadingPhoto && <span className="muted">Uploading…</span>}
           {photoError && <span className="error">{photoError}</span>}
@@ -93,15 +137,29 @@ export default function ProfileSetup() {
         </label>
         <label>
           Gender
-          <input value={form.gender} onChange={(e) => update('gender', e.target.value)} placeholder="e.g. woman, man, non-binary" />
+          <select value={form.gender} onChange={(e) => update('gender', e.target.value)}>
+            <option value="">Select…</option>
+            {GENDER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            {form.gender && !GENDER_OPTIONS.some((o) => o.value === form.gender) && <option value={form.gender}>{form.gender}</option>}
+          </select>
         </label>
         <label>
           Interested in
-          <input
-            value={form.interestedIn}
-            onChange={(e) => update('interestedIn', e.target.value)}
-            placeholder="e.g. men, women, everyone"
-          />
+          <select value={form.interestedIn} onChange={(e) => update('interestedIn', e.target.value)}>
+            <option value="">Select…</option>
+            {INTERESTED_IN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            {form.interestedIn && !INTERESTED_IN_OPTIONS.some((o) => o.value === form.interestedIn) && (
+              <option value={form.interestedIn}>{form.interestedIn}</option>
+            )}
+          </select>
         </label>
         <label>
           Location
@@ -117,6 +175,24 @@ export default function ProfileSetup() {
           {submitting ? 'Saving…' : 'Save profile'}
         </button>
       </form>
+
+      {notifStatus && (
+        <div className="card">
+          <h3>Push notifications</h3>
+          <p className="muted">Get notified about new matches, wing votes, and messages — even when Wingd isn't open.</p>
+          {notifError && <p className="error">{notifError}</p>}
+          {notifStatus === 'granted' && <p className="success">Notifications are on.</p>}
+          {notifStatus === 'denied' && (
+            <p className="muted">Blocked — enable notifications for this site in your browser's settings to turn them back on.</p>
+          )}
+          {notifStatus === 'unsupported' && <p className="muted">Not supported in this browser.</p>}
+          {notifStatus === 'default' && (
+            <button onClick={handleEnableNotifications} disabled={enablingNotif}>
+              {enablingNotif ? 'Enabling…' : 'Enable notifications'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
